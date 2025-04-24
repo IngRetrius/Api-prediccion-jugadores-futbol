@@ -1,0 +1,31 @@
+# Entorno virtual
+venv/
+.env/
+.venv/
+
+# Archivos de modelos
+*.pkl
+*.h5
+
+# Cachés de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos de logs
+*.log
+
+# Configuración de Jupyter/IPython
+.ipynb_checkpoints
+
+# Archivos temporales del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos de configuración de VS Code
+.vscode/
+
+# Otros archivos que pueden ser generados
+*.sqlite3
+*.db
+*.csv
