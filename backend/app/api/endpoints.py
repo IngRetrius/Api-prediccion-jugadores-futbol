@@ -13,7 +13,7 @@ from backend.app.api.validation import (
     ModelSelectionRequest,
     PredictionResponse
 )
-from app.config import AVAILABLE_PLAYERS, HISTORICAL_DATA_FILE, MODEL_WEIGHTS
+from backend.app.config import AVAILABLE_PLAYERS, HISTORICAL_DATA_FILE, MODEL_WEIGHTS
 
 router = APIRouter()
 prediction_engine = PredictionEngine()

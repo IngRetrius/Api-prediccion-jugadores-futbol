@@ -9,7 +9,7 @@ import uvicorn
 
 from backend.app.api.endpoints import router as api_router
 
-from app.config import (
+from backend.app.config import (
     API_TITLE, 
     API_DESCRIPTION, 
     API_VERSION, 
