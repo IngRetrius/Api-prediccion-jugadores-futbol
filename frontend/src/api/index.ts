@@ -71,13 +71,13 @@ export const apiGet = async <T>(url: string, config?: AxiosRequestConfig): Promi
 // Wrapper para peticiones POST
 export const apiPost = async <T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
   try {
-    // Verificar si los datos están en un formato correcto
-    const cleanData = data?.request ? data.request : data;
+    // NO modificar la estructura de los datos aquí
+    // Eliminamos la línea: const cleanData = data?.request ? data.request : data;
     
     // Log para depuración
-    console.log(`POST ${url}:`, cleanData);
+    console.log(`POST ${url}:`, data);
     
-    const response = await axiosInstance.post<T>(url, cleanData, config);
+    const response = await axiosInstance.post<T>(url, data, config);
     return response.data;
   } catch (error) {
     console.error(`Error en POST ${url}:`, error);

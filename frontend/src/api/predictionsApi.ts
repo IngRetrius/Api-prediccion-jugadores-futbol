@@ -22,10 +22,14 @@ export const predictPlayerGoals = async (request: PlayerPredictionRequest): Prom
     }
   }
   
-  // Crear el objeto con la estructura correcta que espera el backend
+  // Añadir model_selection si está definido
+  if (request.model_selection) {
+    formattedRequest.model_selection = request.model_selection;
+  }
+  
+  // Empaquetar en la estructura que espera el backend
   const payload = {
     request: formattedRequest
-    // model_selection es opcional, no lo incluimos a menos que sea necesario
   };
   
   console.log('Enviando payload:', payload); // Para depuración
@@ -48,7 +52,12 @@ export const predictMatch = async (request: MatchPredictionRequest): Promise<any
     }
   }
   
-  return await apiPost<any>('/predict/match', formattedRequest);
+  // Mantener la misma estructura para consistencia
+  const payload = {
+    request: formattedRequest
+  };
+  
+  return await apiPost<any>('/predict/match', payload);
 };
 
 // Obtener el estado del sistema

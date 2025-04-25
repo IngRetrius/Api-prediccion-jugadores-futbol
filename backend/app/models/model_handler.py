@@ -834,12 +834,13 @@ class PredictionEngine:
             }
     
     def _predict_lstm(self, model_data: dict, processed_data: dict) -> dict:
-        """Predicción con modelo LSTM."""
+        """Predicción con modelo LSTM (maneja incompatibilidad de características)."""
         result = {
             "prediction": None,
             "confidence": None,
             "metadata": {},
-            "disponible": False
+            "disponible": False,
+            "raw_prediction": None
         }
         
         # Verificar si TensorFlow está disponible
@@ -858,23 +859,87 @@ class PredictionEngine:
                 modelo = model_data['modelo_keras']
                 X = processed_data['X']
                 
-                # Normalizar datos con el scaler guardado
+                # Normalizar datos con el scaler guardado si existe
                 if 'scaler' in model_data and model_data['scaler'] is not None:
-                    scaler = model_data['scaler']
-                    n_samples, n_steps, n_features = X.shape
-                    X_2d = X.reshape(n_samples * n_steps, n_features)
-                    X_norm = scaler.transform(X_2d).reshape(n_samples, n_steps, n_features)
+                    try:
+                        scaler = model_data['scaler']
+                        n_samples, n_steps, n_features = X.shape
+                        X_2d = X.reshape(n_samples * n_steps, n_features)
+                        
+                        # Verificar que el scaler esté ajustado antes de usarlo
+                        if hasattr(scaler, 'center_') and hasattr(scaler, 'scale_'):
+                            X_norm = scaler.transform(X_2d).reshape(n_samples, n_steps, n_features)
+                        else:
+                            logger.warning("RobustScaler no está ajustado, usando datos sin normalizar")
+                            X_norm = X
+                    except Exception as e:
+                        logger.warning(f"Error al normalizar con scaler: {str(e)}")
+                        X_norm = X  # Usar datos originales si falla la normalización
                 else:
                     X_norm = X
                 
-                # Realizar predicción
-                pred = modelo.predict(X_norm, verbose=0).flatten()[0]
+                # NUEVO: Verificar compatibilidad de forma y realizar ajuste si es necesario
+                # Obtener la forma esperada por el modelo
+                expected_shape = None
+                if hasattr(modelo, 'input_shape'):
+                    expected_shape = modelo.input_shape
+                elif hasattr(modelo, 'inputs') and hasattr(modelo.inputs[0], 'shape'):
+                    expected_shape = modelo.inputs[0].shape
+                    
+                if expected_shape is not None:
+                    # Extraer dimensiones actuales y esperadas
+                    _, _, current_features = X_norm.shape
+                    _, _, expected_features = expected_shape
+                    
+                    logger.info(f"Forma actual: (None, {n_steps}, {current_features}), Forma esperada: {expected_shape}")
+                    
+                    # Si hay diferencia en el número de características
+                    if current_features != expected_features:
+                        logger.warning(f"Incompatibilidad de características: modelo espera {expected_features}, datos tienen {current_features}")
+                        
+                        if current_features < expected_features:
+                            # Rellenar con ceros hasta alcanzar el número esperado de características
+                            padding = np.zeros((n_samples, n_steps, expected_features - current_features))
+                            X_norm = np.concatenate([X_norm, padding], axis=2)
+                            logger.info(f"Datos ajustados a forma: {X_norm.shape}")
+                        else:
+                            # Si tenemos más características de las esperadas, truncar
+                            logger.warning(f"Truncando características de {current_features} a {expected_features}")
+                            X_norm = X_norm[:, :, :expected_features]
                 
-                # Aplicar redondeo probabilístico
+                # Realizar predicción
+                pred_raw = modelo.predict(X_norm, verbose=0)
+                
+                # Extraer el valor predicho del resultado (manejar diferentes formatos)
+                pred = None
+                
+                # Formato Array/Tensor
+                if hasattr(pred_raw, 'flatten'):
+                    pred_flatten = pred_raw.flatten()
+                    if len(pred_flatten) > 0:
+                        pred = float(pred_flatten[0])
+                
+                # Formato Lista/Array
+                elif isinstance(pred_raw, (list, np.ndarray)):
+                    if len(pred_raw) > 0:
+                        if isinstance(pred_raw[0], (list, np.ndarray)):
+                            if len(pred_raw[0]) > 0:
+                                pred = float(pred_raw[0][0])
+                        else:
+                            pred = float(pred_raw[0])
+                
+                # Último recurso
+                if pred is None:
+                    try:
+                        pred = float(pred_raw)
+                    except:
+                        pred = 0.0
+                
+                # Asegurar que la predicción no sea negativa
                 if pred < 0:
                     pred = 0
                 
-                # Calcular probabilidades
+                # Calcular valores para la respuesta
                 entero = int(pred)
                 decimal = pred - entero
                 
@@ -887,7 +952,10 @@ class PredictionEngine:
                 result["metadata"] = {
                     "model_type": "LSTM",
                     "architecture": model_data.get('modelo_config', {}).get('architecture', 'simple'),
-                    "features_used": processed_data.get('features', [])
+                    "features_used": processed_data.get('features', []),
+                    "original_shape": X.shape,
+                    "expected_shape": expected_shape if expected_shape else "unknown",
+                    "padding_applied": current_features != expected_features if expected_shape else False
                 }
                 
                 return result
@@ -896,20 +964,33 @@ class PredictionEngine:
                 result["error"] = f"Error en predicción LSTM: {str(e)}"
                 return result
         
-        # Si no hay modelo Keras válido, intentar con modelo_entrenado
+        # Si no hay modelo Keras válido, intentar con modelo_entrenado (alternativa)
         if 'modelo_entrenado' in model_data and model_data['modelo_entrenado'] is not None and not isinstance(model_data['modelo_entrenado'], str) and 'X' in processed_data:
             try:
                 modelo = model_data['modelo_entrenado']
                 X = processed_data['X']
                 
                 # Realizar predicción
-                pred = modelo.predict(X).flatten()[0]
+                pred_raw = modelo.predict(X)
                 
-                # Aplicar redondeo probabilístico
-                if pred < 0:
-                    pred = 0
+                # Extraer valor
+                pred = 0.0
+                if hasattr(pred_raw, 'flatten'):
+                    pred_flatten = pred_raw.flatten()
+                    if len(pred_flatten) > 0:
+                        pred = float(pred_flatten[0])
+                elif isinstance(pred_raw, (list, np.ndarray)):
+                    if len(pred_raw) > 0:
+                        pred = float(pred_raw[0])
+                else:
+                    try:
+                        pred = float(pred_raw)
+                    except:
+                        pred = 0.0
                 
-                # Calcular probabilidades
+                # Asegurar que la predicción no sea negativa
+                pred = max(0, pred)
+                
                 entero = int(pred)
                 decimal = pred - entero
                 
@@ -921,7 +1002,6 @@ class PredictionEngine:
                 # Añadir metadatos
                 result["metadata"] = {
                     "model_type": "LSTM",
-                    "architecture": model_data.get('modelo_config', {}).get('architecture', 'simple'),
                     "features_used": processed_data.get('features', [])
                 }
                 
@@ -958,21 +1038,54 @@ class PredictionEngine:
             
             # Realizar predicción
             try:
+                # Manejar todas las formas posibles del resultado
+                pred_val = 0.0
+                
                 if exog is not None:
-                    pred = modelo.forecast(steps=1, exog=exog)[0]
+                    prediccion = modelo.forecast(steps=1, exog=exog)
                 else:
-                    pred = modelo.forecast(steps=1)[0]
+                    prediccion = modelo.forecast(steps=1)
+                
+                # Manejo robusto del resultado de predicción
+                if hasattr(prediccion, 'iloc'):
+                    # Es un DataFrame o Series de pandas
+                    try:
+                        pred_val = float(prediccion.iloc[0])
+                    except (IndexError, AttributeError) as e:
+                        logger.warning(f"Error al acceder usando .iloc[0]: {str(e)}")
+                        # Intentar otros métodos
+                        try:
+                            pred_val = float(prediccion[0])
+                        except:
+                            logger.warning("Error al acceder usando [0]")
+                            if hasattr(prediccion, 'values'):
+                                try:
+                                    pred_val = float(prediccion.values[0])
+                                except:
+                                    logger.warning("Error al acceder usando .values[0]")
+                elif isinstance(prediccion, (list, np.ndarray)):
+                    # Es una lista o array
+                    try:
+                        pred_val = float(prediccion[0])
+                    except (IndexError, TypeError):
+                        logger.warning("Error al acceder usando [0] en lista/array")
+                else:
+                    # Último recurso - intentar convertir directamente
+                    try:
+                        pred_val = float(prediccion)
+                    except:
+                        logger.warning("Error al convertir predicción a float")
                 
                 # Asegurar que la predicción no sea negativa
-                pred = max(0, pred)
+                pred_val = max(0, pred_val)
                 
                 # Asignar resultados
-                entero = int(pred)
-                decimal = pred - entero
+                entero = int(pred_val)
+                decimal = pred_val - entero
                 
                 result["prediction"] = entero
                 result["confidence"] = 1 - decimal if decimal <= 0.5 else decimal
-                result["raw_prediction"] = float(pred)
+                result["raw_prediction"] = float(pred_val)
                 result["disponible"] = True
                 
                 # Añadir metadatos
