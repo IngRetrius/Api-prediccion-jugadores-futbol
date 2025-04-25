@@ -1,113 +1,148 @@
-// src/components/predictions/PredictionForm.tsx
 import React, { useState, useEffect } from 'react';
-import { useFormik } from 'formik';
-import * as Yup from 'yup';
-import { format } from 'date-fns';
-
+import { PlayerPredictionRequest } from '../../types/models';
 import Button from '../common/Button';
 import Card from '../common/Card';
-import Input from '../common/Input';
-import Select from '../common/Select';
-import { getAvailablePlayers } from '../../api/playersApi';
-import { getAvailableTeams } from '../../api/teamsApi';
-import { PlayerPredictionRequest } from '../../types/models';
+import { formatAPIDate } from '../../utils/dateUtils';
+
+// Definición de interfaces para opciones de jugadores y equipos
+interface PlayerOption {
+  name: string;
+  displayName: string;
+  team?: string;
+}
+
+interface TeamOption {
+  name: string;
+  displayName: string;
+}
 
 interface PredictionFormProps {
-  onSubmit: (values: PlayerPredictionRequest) => void;
+  onSubmit: (values: PlayerPredictionRequest) => Promise<void>;
   isLoading?: boolean;
 }
 
 const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = false }) => {
-  const [players, setPlayers] = useState<{value: string, label: string}[]>([]);
-  const [teams, setTeams] = useState<{value: string, label: string}[]>([]);
+  // Estado del formulario
+  const [formValues, setFormValues] = useState<PlayerPredictionRequest>({
+    player_name: '',
+    opponent: '',
+    is_home: true,
+    date: formatAPIDate(new Date())
+  });
+  
+  // Estado para campos avanzados
   const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // Validación del formulario
-  const validationSchema = Yup.object({
-    player_name: Yup.string().required('El jugador es requerido'),
-    opponent: Yup.string().required('El equipo oponente es requerido'),
-    is_home: Yup.boolean().required('Indique si es local o visitante'),
-    date: Yup.date().nullable(),
-    shots_on_target: Yup.number().min(0, 'Debe ser mayor o igual a 0').nullable(),
-    total_shots: Yup.number().min(0, 'Debe ser mayor o igual a 0').nullable(),
-    minutes: Yup.number().min(0, 'Debe ser mayor o igual a 0').max(120, 'Máximo 120 minutos').nullable(),
-  });
-
-  // Configuración de Formik
-  const formik = useFormik({
-    initialValues: {
-      player_name: '',
-      opponent: '',
-      is_home: true,
-      date: format(new Date(), 'yyyy-MM-dd'),
-      shots_on_target: undefined,
-      total_shots: undefined,
-      minutes: undefined,
-      use_ensemble: true,
-      models: ['lstm', 'sarimax', 'poisson']
-    },
-    validationSchema,
-    onSubmit: (values) => {
-      // Preparar request para la API
-      const request: PlayerPredictionRequest = {
-        player_name: values.player_name,
-        opponent: values.opponent,
-        is_home: values.is_home,
-        date: values.date,
-      };
-
-      // Añadir campos opcionales si están definidos
-      if (values.shots_on_target !== undefined) {
-        request.shots_on_target = values.shots_on_target;
-      }
-      
-      if (values.total_shots !== undefined) {
-        request.total_shots = values.total_shots;
-      }
-      
-      if (values.minutes !== undefined) {
-        request.minutes = values.minutes;
-      }
-
-      // Añadir configuración de modelos si no se usa el ensemble
-      if (!values.use_ensemble) {
-        request.model_selection = {
-          models: values.models,
-        };
-      }
-
-      onSubmit(request);
-    },
-  });
-
-  // Cargar jugadores y equipos al montar el componente
+  
+  // Estado para datos de API
+  const [players, setPlayers] = useState<PlayerOption[]>([]);
+  const [teams, setTeams] = useState<TeamOption[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
+  
+  // Cargar datos de jugadores y equipos
   useEffect(() => {
-    const loadData = async () => {
+    const fetchData = async () => {
       try {
-        // Obtener jugadores
-        const playersData = await getAvailablePlayers();
-        setPlayers(playersData.map(player => ({
-          value: player.name,
-          label: player.name.replace('_', ' ')
-        })));
-
-        // Obtener equipos
-        const teamsData = await getAvailableTeams();
-        setTeams(teamsData.map(team => ({
-          value: team.name,
-          label: team.name
-        })));
+        setLoadingData(true);
+        setDataError(null);
+        
+        // Datos de jugadores según lo proporcionado
+        const playerList: PlayerOption[] = [
+          { name: 'Carlos_Bacca', displayName: 'Carlos Bacca', team: 'Junior' },
+          { name: 'Dayro_Moreno', displayName: 'Dayro Moreno', team: 'Once Caldas' },
+          { name: 'Hugo_Rodallega', displayName: 'Hugo Rodallega', team: 'Independiente Santa Fe' },
+          { name: 'Leonardo_Castro', displayName: 'Leonardo Castro', team: 'Millonarios' },
+          { name: 'Marco_Perez', displayName: 'Marco Perez', team: 'Junior' }
+        ];
+        
+        // Extraer equipos únicos de los jugadores
+        const uniqueTeams = [...new Set(playerList.map(player => player.team))];
+        const teamList: TeamOption[] = uniqueTeams
+          .filter((team): team is string => team !== undefined) // Filtrar undefined
+          .map(team => ({
+            name: team,
+            displayName: team
+          }));
+        
+        // Añadir más equipos si es necesario
+        const additionalTeams: TeamOption[] = [
+          { name: 'América de Cali', displayName: 'América de Cali' },
+          { name: 'Atlético Nacional', displayName: 'Atlético Nacional' },
+          { name: 'Deportivo Cali', displayName: 'Deportivo Cali' },
+          { name: 'Bucaramanga', displayName: 'Bucaramanga' }
+        ];
+        
+        // Combinar y eliminar duplicados
+        const allTeams = [...teamList];
+        additionalTeams.forEach(team => {
+          if (!allTeams.some(t => t.name === team.name)) {
+            allTeams.push(team);
+          }
+        });
+        
+        setPlayers(playerList);
+        setTeams(allTeams);
+        setLoadingData(false);
+        
       } catch (error) {
         console.error('Error cargando datos:', error);
+        setDataError('Error al cargar jugadores o equipos. Por favor, intente de nuevo.');
+        setLoadingData(false);
       }
     };
-
-    loadData();
+    
+    fetchData();
   }, []);
-
+  
+  // Manejar cambios en los campos del formulario
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormValues(prev => ({ ...prev, [name]: checked }));
+    } else if (type === 'number') {
+      const numberValue = value === '' ? undefined : Number(value);
+      setFormValues(prev => ({ ...prev, [name]: numberValue }));
+    } else {
+      setFormValues(prev => ({ ...prev, [name]: value }));
+    }
+  };
+  
+  // Manejar cambio de condición (local/visitante)
+  const handleConditionChange = (isHome: boolean) => {
+    setFormValues(prev => ({ ...prev, is_home: isHome }));
+  };
+  
+  // Validar el formulario
+  const isFormValid = () => {
+    return !!formValues.player_name && !!formValues.opponent;
+  };
+  
+  // Manejar envío del formulario
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (isFormValid()) {
+      onSubmit(formValues);
+    }
+  };
+  
   return (
     <Card title="Predicción de Goles">
-      <form onSubmit={formik.handleSubmit}>
+      {dataError && (
+        <div className="mb-4 p-3 bg-red-50 text-red-600 rounded">
+          {dataError}
+          <button 
+            onClick={() => window.location.reload()} 
+            className="ml-2 underline"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+      
+      <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Jugador */}
           <div>
@@ -117,26 +152,19 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = f
             <select
               id="player_name"
               name="player_name"
-              value={formik.values.player_name}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              disabled={isLoading}
-              className={`w-full px-3 py-2 border ${
-                formik.touched.player_name && formik.errors.player_name 
-                  ? 'border-red-500' 
-                  : 'border-gray-300'
-              } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
+              value={formValues.player_name}
+              onChange={handleChange}
+              disabled={isLoading || loadingData}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              required
             >
               <option value="">Seleccione un jugador</option>
               {players.map((player) => (
-                <option key={player.value} value={player.value}>
-                  {player.label}
+                <option key={player.name} value={player.name}>
+                  {player.displayName} ({player.team})
                 </option>
               ))}
             </select>
-            {formik.touched.player_name && formik.errors.player_name && (
-              <p className="mt-1 text-sm text-red-600">{formik.errors.player_name}</p>
-            )}
           </div>
 
           {/* Oponente */}
@@ -147,26 +175,19 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = f
             <select
               id="opponent"
               name="opponent"
-              value={formik.values.opponent}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              disabled={isLoading}
-              className={`w-full px-3 py-2 border ${
-                formik.touched.opponent && formik.errors.opponent 
-                  ? 'border-red-500' 
-                  : 'border-gray-300'
-              } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
+              value={formValues.opponent}
+              onChange={handleChange}
+              disabled={isLoading || loadingData}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              required
             >
               <option value="">Seleccione un equipo</option>
               {teams.map((team) => (
-                <option key={team.value} value={team.value}>
-                  {team.label}
+                <option key={team.name} value={team.name}>
+                  {team.displayName}
                 </option>
               ))}
             </select>
-            {formik.touched.opponent && formik.errors.opponent && (
-              <p className="mt-1 text-sm text-red-600">{formik.errors.opponent}</p>
-            )}
           </div>
 
           {/* Local/Visitante */}
@@ -180,8 +201,8 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = f
                   id="is_home_true"
                   name="is_home"
                   type="radio"
-                  checked={formik.values.is_home}
-                  onChange={() => formik.setFieldValue('is_home', true)}
+                  checked={formValues.is_home}
+                  onChange={() => handleConditionChange(true)}
                   disabled={isLoading}
                   className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                 />
@@ -194,8 +215,8 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = f
                   id="is_home_false"
                   name="is_home"
                   type="radio"
-                  checked={!formik.values.is_home}
-                  onChange={() => formik.setFieldValue('is_home', false)}
+                  checked={!formValues.is_home}
+                  onChange={() => handleConditionChange(false)}
                   disabled={isLoading}
                   className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                 />
@@ -215,9 +236,8 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = f
               id="date"
               name="date"
               type="date"
-              value={formik.values.date}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
+              value={formValues.date || ''}
+              onChange={handleChange}
               disabled={isLoading}
               className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
@@ -251,15 +271,11 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = f
                   type="number"
                   min="0"
                   step="1"
-                  value={formik.values.shots_on_target || ''}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
+                  value={formValues.shots_on_target || ''}
+                  onChange={handleChange}
                   disabled={isLoading}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
-                {formik.touched.shots_on_target && formik.errors.shots_on_target && (
-                  <p className="mt-1 text-sm text-red-600">{formik.errors.shots_on_target}</p>
-                )}
               </div>
 
               {/* Tiros totales */}
@@ -273,15 +289,11 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = f
                   type="number"
                   min="0"
                   step="1"
-                  value={formik.values.total_shots || ''}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
+                  value={formValues.total_shots || ''}
+                  onChange={handleChange}
                   disabled={isLoading}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
-                {formik.touched.total_shots && formik.errors.total_shots && (
-                  <p className="mt-1 text-sm text-red-600">{formik.errors.total_shots}</p>
-                )}
               </div>
 
               {/* Minutos */}
@@ -296,76 +308,12 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = f
                   min="0"
                   max="120"
                   step="1"
-                  value={formik.values.minutes || ''}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
+                  value={formValues.minutes || ''}
+                  onChange={handleChange}
                   disabled={isLoading}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
-                {formik.touched.minutes && formik.errors.minutes && (
-                  <p className="mt-1 text-sm text-red-600">{formik.errors.minutes}</p>
-                )}
               </div>
-            </div>
-
-            {/* Selección de modelos */}
-            <div className="mt-4">
-              <h4 className="font-medium text-gray-900 mb-3">Configuración de modelos</h4>
-              
-              <div className="mb-3">
-                <div className="flex items-center">
-                  <input
-                    id="use_ensemble"
-                    name="use_ensemble"
-                    type="checkbox"
-                    checked={formik.values.use_ensemble}
-                    onChange={formik.handleChange}
-                    disabled={isLoading}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="use_ensemble" className="ml-2 block text-sm text-gray-700">
-                    Usar ensemble (combinación de modelos)
-                  </label>
-                </div>
-              </div>
-
-              {/* Mostrar selección de modelos si no se usa ensemble */}
-              {!formik.values.use_ensemble && (
-                <div className="ml-2">
-                  <p className="text-sm text-gray-700 mb-2">Seleccionar modelos:</p>
-                  <div className="space-y-2">
-                    {['lstm', 'sarimax', 'poisson'].map(model => (
-                      <div key={model} className="flex items-center">
-                        <input
-                          id={`model_${model}`}
-                          name="models"
-                          type="checkbox"
-                          value={model}
-                          checked={formik.values.models.includes(model)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              formik.setFieldValue('models', [...formik.values.models, model]);
-                            } else {
-                              formik.setFieldValue(
-                                'models',
-                                formik.values.models.filter(m => m !== model)
-                              );
-                            }
-                          }}
-                          disabled={isLoading}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <label htmlFor={`model_${model}`} className="ml-2 block text-sm text-gray-700">
-                          {model.toUpperCase()}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                  {formik.values.models.length === 0 && (
-                    <p className="mt-1 text-sm text-red-600">Seleccione al menos un modelo</p>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -376,7 +324,8 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = f
             type="submit"
             variant="primary"
             fullWidth
-            disabled={isLoading || !formik.isValid}
+            isLoading={isLoading}
+            disabled={isLoading || !isFormValid()}
           >
             {isLoading ? 'Procesando...' : 'Predecir Goles'}
           </Button>
