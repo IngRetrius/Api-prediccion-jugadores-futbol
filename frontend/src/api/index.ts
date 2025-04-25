@@ -16,9 +16,40 @@ const axiosInstance: AxiosInstance = axios.create({
 axiosInstance.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error) => {
+    // Crear un objeto de error más detallado
+    let errorDetail = 'Error de conexión con el servidor';
+    let statusCode = 500;
+    
+    if (error.response) {
+      // La respuesta del servidor contiene información de error
+      statusCode = error.response.status;
+      
+      if (error.response.data) {
+        if (typeof error.response.data === 'string') {
+          errorDetail = error.response.data;
+        } else if (error.response.data.detail) {
+          if (Array.isArray(error.response.data.detail)) {
+            // Para errores de validación (422)
+            const validationErrors = error.response.data.detail.map((err: any) => 
+              `Campo: ${err.loc.join('.')} - ${err.msg}`
+            ).join('; ');
+            errorDetail = `Error de validación: ${validationErrors}`;
+          } else {
+            errorDetail = error.response.data.detail;
+          }
+        }
+      }
+    } else if (error.request) {
+      // La petición fue hecha pero no se recibió respuesta
+      errorDetail = 'No se recibió respuesta del servidor';
+    } else {
+      // Error al configurar la petición
+      errorDetail = error.message;
+    }
+    
     const errorResponse: ApiError = {
-      detail: error.response?.data?.detail || 'Error de conexión con el servidor',
-      status_code: error.response?.status || 500,
+      detail: errorDetail,
+      status_code: statusCode,
     };
     
     console.error('API Error:', errorResponse);
@@ -28,14 +59,30 @@ axiosInstance.interceptors.response.use(
 
 // Wrapper para peticiones GET
 export const apiGet = async <T>(url: string, config?: AxiosRequestConfig): Promise<T> => {
-  const response = await axiosInstance.get<T>(url, config);
-  return response.data;
+  try {
+    const response = await axiosInstance.get<T>(url, config);
+    return response.data;
+  } catch (error) {
+    console.error(`Error en GET ${url}:`, error);
+    throw error;
+  }
 };
 
 // Wrapper para peticiones POST
 export const apiPost = async <T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
-  const response = await axiosInstance.post<T>(url, data, config);
-  return response.data;
+  try {
+    // Verificar si los datos están en un formato correcto
+    const cleanData = data?.request ? data.request : data;
+    
+    // Log para depuración
+    console.log(`POST ${url}:`, cleanData);
+    
+    const response = await axiosInstance.post<T>(url, cleanData, config);
+    return response.data;
+  } catch (error) {
+    console.error(`Error en POST ${url}:`, error);
+    throw error;
+  }
 };
 
 export default axiosInstance;

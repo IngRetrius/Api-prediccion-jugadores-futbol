@@ -10,9 +10,10 @@ from typing import Dict, List, Tuple, Union, Optional
 import time
 from datetime import datetime, timedelta
 from scipy.stats import poisson
+import keras
+from keras.models import load_model 
 try:
     import tensorflow as tf
-    from tensorflow.keras.models import load_model
     HAS_TF = True
 except ImportError:
     HAS_TF = False
@@ -112,7 +113,8 @@ class ModelLoader:
         # Determinar ruta del modelo
         if model_type == "lstm":
             model_dir = LSTM_MODELS_DIR
-            file_name = f"lstm_{player_name}.pkl"
+            pkl_file_name = f"lstm_{player_name}.pkl"
+            h5_file_name = f"lstm_{player_name}.h5"
         elif model_type == "sarimax":
             model_dir = SARIMAX_MODELS_DIR
             file_name = f"arima_{player_name}.pkl"
@@ -122,18 +124,80 @@ class ModelLoader:
         else:
             raise ValueError(f"Tipo de modelo no válido: {model_type}")
         
-        model_path = os.path.join(model_dir, file_name)
-        
-        # Verificar existencia del modelo
-        if not os.path.exists(model_path):
-            logger.warning(f"No se encontró el modelo {file_name} en {model_dir}")
-            # Retornar un diccionario indicando que el modelo no está disponible
-            return {
-                "error": f"Modelo no encontrado: {file_name}",
-                "modelo_entrenado": None,
-                "modelo_config": {"tipo_modelo": model_type},
-                "disponible": False
-            }
+        # Para modelos LSTM, manejar el caso especial donde puede haber .h5 pero no .pkl
+        if model_type == "lstm":
+            pkl_model_path = os.path.join(model_dir, pkl_file_name)
+            h5_model_path = os.path.join(model_dir, h5_file_name)
+            
+            # Si no existe el archivo .pkl pero sí el .h5, crear una estructura básica
+            if not os.path.exists(pkl_model_path) and os.path.exists(h5_model_path):
+                try:
+                    if HAS_TF:
+                        # Crear un modelo básico con configuración por defecto
+                        model_data = {
+                            "disponible": True,
+                            "modelo_config": {
+                                "tipo_modelo": "lstm",
+                                "ventana": DEFAULT_WINDOW_SIZE,
+                                "caracteristicas": [
+                                    'Tiros_a_puerta', 'Tiros_totales', 'Minutos',
+                                    'Sede_Local', 'Sede_Visitante', 'Es_FinDeSemana'
+                                ]
+                            }
+                        }
+                        
+                        # Cargar el modelo Keras directamente
+                        model_data["modelo_keras"] = load_model(h5_model_path)
+                        logger.info(f"Modelo Keras para {player_name} cargado directamente de H5")
+                        
+                        # Crear un scaler por defecto si es necesario
+                        model_data["scaler"] = RobustScaler()
+                        
+                        # Almacenar en caché
+                        self.model_cache[cache_key] = model_data
+                        return model_data
+                    else:
+                        logger.warning("TensorFlow no está disponible, no se puede cargar el modelo LSTM")
+                        return {
+                            "error": "TensorFlow no está disponible",
+                            "modelo_entrenado": None,
+                            "modelo_config": {"tipo_modelo": model_type},
+                            "disponible": False
+                        }
+                except Exception as e:
+                    logger.error(f"Error al cargar modelo H5: {str(e)}")
+                    return {
+                        "error": f"Error al cargar modelo H5: {str(e)}",
+                        "modelo_entrenado": None,
+                        "modelo_config": {"tipo_modelo": model_type},
+                        "disponible": False
+                    }
+            elif not os.path.exists(pkl_model_path):
+                # Si no existe ni el PKL ni el H5
+                logger.warning(f"No se encontró el modelo {pkl_file_name} en {model_dir}")
+                return {
+                    "error": f"Modelo no encontrado: {pkl_file_name}",
+                    "modelo_entrenado": None,
+                    "modelo_config": {"tipo_modelo": model_type},
+                    "disponible": False
+                }
+            
+            # Si existe el .pkl, continuamos con el flujo normal
+            model_path = pkl_model_path
+        else:
+            # Para otros modelos, usamos el comportamiento normal
+            model_path = os.path.join(model_dir, file_name)
+            
+            # Verificar existencia del modelo
+            if not os.path.exists(model_path):
+                logger.warning(f"No se encontró el modelo {file_name} en {model_dir}")
+                # Retornar un diccionario indicando que el modelo no está disponible
+                return {
+                    "error": f"Modelo no encontrado: {file_name}",
+                    "modelo_entrenado": None,
+                    "modelo_config": {"tipo_modelo": model_type},
+                    "disponible": False
+                }
         
         # Cargar modelo
         try:
@@ -1081,12 +1145,15 @@ class PredictionEngine:
         
         # Obtener predicciones individuales
         model_predictions = {}
+        available_models = []
         
         # Intentar obtener predicción LSTM solo si TensorFlow está disponible
         if HAS_TF:
             try:
                 lstm_result = await self.predict_with_model(player_name, "lstm", match_data)
                 model_predictions["lstm"] = lstm_result
+                if lstm_result.get("disponible", False):
+                    available_models.append("lstm")
             except Exception as e:
                 logger.warning(f"Error al obtener predicción LSTM para {player_name}: {str(e)}")
                 model_predictions["lstm"] = {
@@ -1117,6 +1184,8 @@ class PredictionEngine:
         try:
             sarimax_result = await self.predict_with_model(player_name, "sarimax", match_data)
             model_predictions["sarimax"] = sarimax_result
+            if sarimax_result.get("disponible", False):
+                available_models.append("sarimax")
         except Exception as e:
             logger.warning(f"Error al obtener predicción SARIMAX para {player_name}: {str(e)}")
             model_predictions["sarimax"] = {
@@ -1130,6 +1199,8 @@ class PredictionEngine:
         try:
             poisson_result = await self.predict_with_model(player_name, "poisson", match_data)
             model_predictions["poisson"] = poisson_result
+            if poisson_result.get("disponible", False):
+                available_models.append("poisson")
         except Exception as e:
             logger.warning(f"Error al obtener predicción Poisson para {player_name}: {str(e)}")
             model_predictions["poisson"] = {
@@ -1140,8 +1211,40 @@ class PredictionEngine:
                 "disponible": False
             }
         
-        # Calcular predicción ensemble
-        ensemble_result = self.calculate_prediction_ensemble(model_predictions, weights)
+        # Si no hay modelos disponibles, retornar error
+        if not available_models:
+            return {
+                "ensemble_prediction": None,
+                "confidence": None,
+                "raw_prediction": None,
+                "disponible": False,
+                "error": "No hay modelos disponibles para predicción",
+                "model_predictions": model_predictions,
+                "metadata": {
+                    "weights": weights,
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+        
+        # Ajustar pesos para usar solo modelos disponibles
+        adjusted_weights = {}
+        for model in available_models:
+            if model in weights:
+                adjusted_weights[model] = weights[model]
+        
+        # Normalizar pesos
+        total_weight = sum(adjusted_weights.values())
+        if total_weight > 0:
+            adjusted_weights = {k: v/total_weight for k, v in adjusted_weights.items()}
+        else:
+            # Si no hay pesos válidos, usar pesos iguales
+            adjusted_weights = {k: 1.0/len(available_models) for k in available_models}
+        
+        # Calcular predicción ensemble con los modelos disponibles
+        ensemble_result = self.calculate_prediction_ensemble(
+            {k: v for k, v in model_predictions.items() if k in available_models},
+            adjusted_weights
+        )
         
         # Extraer probabilidad del modelo Poisson si está disponible
         probability_distribution = {}
@@ -1180,13 +1283,10 @@ class PredictionEngine:
             },
             "metadata": {
                 "weights": weights,
-                "adjusted_weights": ensemble_result.get("adjusted_weights", weights),
-                "timestamp": datetime.now().isoformat()
+                "adjusted_weights": adjusted_weights,
+                "timestamp": datetime.now().isoformat(),
+                "models_used": available_models
             }
         }
-        
-        # Si no hay ningún modelo disponible, agregar error
-        if not ensemble_result.get("disponible", False):
-            result["error"] = ensemble_result.get("error", "No hay modelos disponibles para predicción")
         
         return result

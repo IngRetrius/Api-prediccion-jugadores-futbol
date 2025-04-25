@@ -27,10 +27,19 @@ app = FastAPI(
     version=API_VERSION,
 )
 
-# Configurar CORS
+# Configurar CORS - Añadimos explícitamente el origen de desarrollo frontend
+updated_cors_origins = CORS_ORIGINS.copy()
+# Añadir origen del frontend de desarrollo de Vite
+updated_cors_origins.append("http://localhost:5173")
+# También agregamos localhost sin puerto específico para mayor flexibilidad
+updated_cors_origins.append("http://localhost")
+# Agregamos también el origen con 127.0.0.1
+updated_cors_origins.append("http://127.0.0.1:5173")
+
+# Configurar CORS con las URLs actualizadas
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origins=updated_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

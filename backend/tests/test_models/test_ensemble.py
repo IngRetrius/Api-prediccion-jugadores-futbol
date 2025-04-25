@@ -4,7 +4,7 @@ Pruebas para el modelo ensemble del sistema de predicción.
 import pytest
 import numpy as np
 from unittest.mock import AsyncMock, patch, MagicMock
-
+mock_historical_data = MagicMock()
 
 class TestEnsembleModel:
     """
