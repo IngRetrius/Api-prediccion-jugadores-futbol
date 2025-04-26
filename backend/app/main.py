@@ -17,8 +17,11 @@ from backend.app.config import (
     CORS_ORIGINS
 )
 
-# Configurar el logger
-logger.add("logs/api.log", rotation="10 MB", level="INFO")
+# Configurar el logger con enque para evitar problemas de acceso concurrente
+# Primero removemos los handlers por defecto
+logger.remove()
+# Luego añadimos nuestro handler personalizado con enqueue=True
+logger.add("logs/api.log", rotation="10 MB", level="INFO", enqueue=True)
 
 # Crear aplicación FastAPI
 app = FastAPI(
@@ -36,10 +39,10 @@ updated_cors_origins.append("http://localhost")
 # Agregamos también el origen con 127.0.0.1
 updated_cors_origins.append("http://127.0.0.1:5173")
 
-# Configurar CORS con las URLs actualizadas
+# Configurar CORS para permitir todos los orígenes durante desarrollo
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=updated_cors_origins,
+    allow_origins=["*"],  # Permitir todos los orígenes para desarrollo
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

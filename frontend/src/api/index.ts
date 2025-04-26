@@ -16,6 +16,11 @@ const axiosInstance: AxiosInstance = axios.create({
 axiosInstance.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error) => {
+    // Si la solicitud fue cancelada, no tratar como error
+    if (axios.isCancel(error)) {
+      return Promise.reject(error);
+    }
+    
     // Crear un objeto de error más detallado
     let errorDetail = 'Error de conexión con el servidor';
     let statusCode = 500;
@@ -71,9 +76,6 @@ export const apiGet = async <T>(url: string, config?: AxiosRequestConfig): Promi
 // Wrapper para peticiones POST
 export const apiPost = async <T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
   try {
-    // NO modificar la estructura de los datos aquí
-    // Eliminamos la línea: const cleanData = data?.request ? data.request : data;
-    
     // Log para depuración
     console.log(`POST ${url}:`, data);
     

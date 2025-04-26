@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getPlayerHistory } from '../../api/playersApi';
 import { formatDisplayDate } from '../../utils/dateUtils';
 import { PlayerHistory as PlayerHistoryType } from '../../types/models';
@@ -14,25 +14,50 @@ const PlayerHistory: React.FC<PlayerHistoryProps> = ({ playerName, limit = 10 })
   const [history, setHistory] = useState<PlayerHistoryType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const abortController = useRef<AbortController | null>(null);
   
   useEffect(() => {
+    // Función para obtener el historial
     const fetchHistory = async () => {
+      // Cancelar la solicitud anterior si existe
+      if (abortController.current) {
+        abortController.current.abort();
+      }
+      
+      // Crear nuevo controlador para esta solicitud
+      abortController.current = new AbortController();
+      
       try {
         setLoading(true);
-        const response = await getPlayerHistory(playerName, limit);
+        const response = await getPlayerHistory(
+          playerName, 
+          limit, 
+          abortController.current.signal
+        );
         setHistory(response.history);
         setError(null);
-      } catch (err) {
-        setError('Error al cargar el historial del jugador');
-        console.error('Error fetching player history:', err);
+      } catch (err: any) {
+        // Solo establecer error si no es por cancelación
+        if (err.name !== 'AbortError') {
+          setError('Error al cargar el historial del jugador');
+          console.error('Error fetching player history:', err);
+        }
       } finally {
         setLoading(false);
       }
     };
     
+    // Solo ejecutar si hay un nombre de jugador
     if (playerName) {
       fetchHistory();
     }
+    
+    // Función de limpieza para cancelar cualquier solicitud pendiente
+    return () => {
+      if (abortController.current) {
+        abortController.current.abort();
+      }
+    };
   }, [playerName, limit]);
   
   if (loading) {

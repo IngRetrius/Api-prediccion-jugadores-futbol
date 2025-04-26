@@ -69,8 +69,20 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, isLoading = f
           { name: 'América de Cali', displayName: 'América de Cali' },
           { name: 'Atlético Nacional', displayName: 'Atlético Nacional' },
           { name: 'Deportivo Cali', displayName: 'Deportivo Cali' },
-          { name: 'Bucaramanga', displayName: 'Bucaramanga' }
-        ];
+          { name: 'Bucaramanga', displayName: 'Bucaramanga' },
+          { name: 'Pereira', displayName: 'Pereira' },
+          { name: 'Rionegro', displayName: 'Rionegro' },
+          { name: 'La Equidad', displayName: 'La Equidad' },
+          { name: 'Envigado', displayName: 'Envigado' },
+          { name: 'Fortaleza CEIF', displayName: 'Fortaleza CEIF' },
+          { name: 'Unión Magdalena', displayName: 'Unión Magdalena' },
+          { name: 'Deportivo Pasto', displayName: 'Deportivo Pasto' },
+          { name: 'Deportes Tolima', displayName: 'Deportes Tolima' },
+          { name: 'Alianza FC', displayName: 'Alianza FC' },
+          { name: 'Independiente Medellín', displayName: 'Independiente Medellín' },
+          { name: 'Boyacá Chicó', displayName: 'Boyacá Chicó' },
+          { name: 'Llaneros', displayName: 'Llaneros' }
+];
         
         // Combinar y eliminar duplicados
         const allTeams = [...teamList];

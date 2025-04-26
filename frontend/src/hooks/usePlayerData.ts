@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getAvailablePlayers, getPlayerHistory, getPlayerModelMetrics } from '../api/playersApi';
 import { Player, PlayerHistoryResponse, ModelMetricsResponse } from '../types/models';
 import { ApiError } from '../types/api';
@@ -18,7 +18,7 @@ export const usePlayers = (): UsePlayersReturn => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   
-  const fetchPlayers = async () => {
+  const fetchPlayers = useCallback(async () => {
     try {
       setIsLoading(true);
       const result = await getAvailablePlayers();
@@ -31,12 +31,12 @@ export const usePlayers = (): UsePlayersReturn => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
   
   // Cargar jugadores al montar el componente
   useEffect(() => {
     fetchPlayers();
-  }, []);
+  }, [fetchPlayers]);
   
   return {
     players,
@@ -60,22 +60,36 @@ export const usePlayerHistory = (): UsePlayerHistoryReturn => {
   const [history, setHistory] = useState<PlayerHistoryResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentRequest, setCurrentRequest] = useState<AbortController | null>(null);
   
-  const fetchHistory = async (playerName: string, limit: number = 10) => {
+  const fetchHistory = useCallback(async (playerName: string, limit: number = 10) => {
+    // Cancelar solicitud anterior si existe
+    if (currentRequest) {
+      currentRequest.abort();
+    }
+    
+    // Crear controlador para esta nueva solicitud
+    const abortController = new AbortController();
+    setCurrentRequest(abortController);
+    
     try {
       setIsLoading(true);
-      const result = await getPlayerHistory(playerName, limit);
+      const result = await getPlayerHistory(playerName, limit, abortController.signal);
       setHistory(result);
       setError(null);
     } catch (err) {
-      console.error('Error obteniendo historial:', err);
-      const errorMessage = (err as ApiError)?.detail || 'Error al cargar el historial del jugador';
-      setError(errorMessage);
-      setHistory(null);
+      // Solo establecer error si no fue una cancelación
+      if ((err as any)?.name !== 'AbortError') {
+        console.error('Error obteniendo historial:', err);
+        const errorMessage = (err as ApiError)?.detail || 'Error al cargar el historial del jugador';
+        setError(errorMessage);
+        setHistory(null);
+      }
     } finally {
       setIsLoading(false);
+      setCurrentRequest(null);
     }
-  };
+  }, []);
   
   return {
     history,
@@ -99,22 +113,36 @@ export const usePlayerMetrics = (): UsePlayerMetricsReturn => {
   const [metrics, setMetrics] = useState<ModelMetricsResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentRequest, setCurrentRequest] = useState<AbortController | null>(null);
   
-  const fetchMetrics = async (playerName: string) => {
+  const fetchMetrics = useCallback(async (playerName: string) => {
+    // Cancelar solicitud anterior si existe
+    if (currentRequest) {
+      currentRequest.abort();
+    }
+    
+    // Crear controlador para esta nueva solicitud
+    const abortController = new AbortController();
+    setCurrentRequest(abortController);
+    
     try {
       setIsLoading(true);
-      const result = await getPlayerModelMetrics(playerName);
+      const result = await getPlayerModelMetrics(playerName, abortController.signal);
       setMetrics(result);
       setError(null);
     } catch (err) {
-      console.error('Error obteniendo métricas:', err);
-      const errorMessage = (err as ApiError)?.detail || 'Error al cargar las métricas del jugador';
-      setError(errorMessage);
-      setMetrics(null);
+      // Solo establecer error si no fue una cancelación
+      if ((err as any)?.name !== 'AbortError') {
+        console.error('Error obteniendo métricas:', err);
+        const errorMessage = (err as ApiError)?.detail || 'Error al cargar las métricas del jugador';
+        setError(errorMessage);
+        setMetrics(null);
+      }
     } finally {
       setIsLoading(false);
+      setCurrentRequest(null);
     }
-  };
+  }, []);
   
   return {
     metrics,
@@ -142,19 +170,20 @@ export const usePlayerData = (initialPlayerName?: string): UsePlayerDataReturn =
   const isLoading = isLoadingHistory || isLoadingMetrics;
   const error = historyError || metricsError;
   
-  const loadPlayerData = async (playerName: string) => {
+  // Usar useCallback para estabilizar la función y evitar rerenderizaciones
+  const loadPlayerData = useCallback(async (playerName: string) => {
     await Promise.all([
       fetchHistory(playerName),
       fetchMetrics(playerName)
     ]);
-  };
+  }, [fetchHistory, fetchMetrics]);
   
   // Cargar datos iniciales si se proporciona un nombre de jugador
   useEffect(() => {
     if (initialPlayerName) {
       loadPlayerData(initialPlayerName);
     }
-  }, [initialPlayerName]);
+  }, [initialPlayerName, loadPlayerData]);
   
   return {
     history,

@@ -24,6 +24,10 @@ HISTORICAL_DATA_FILE = os.path.join(DATA_DIR, "Goleadores_Procesados.csv")
 # Jugadores disponibles
 AVAILABLE_PLAYERS = [
     "Hugo_Rodallega",
+     "Carlos_Bacca",
+     "Dayro_Moreno",
+     "Leonardo_Castro",
+     "Marco_Perez"   
     # Agrega aquí los demás jugadores disponibles según tus datos
 ]
 

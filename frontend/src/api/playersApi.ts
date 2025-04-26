@@ -11,11 +11,24 @@ export const getAvailablePlayers = async (): Promise<Player[]> => {
 };
 
 // Obtener historial de un jugador
-export const getPlayerHistory = async (playerName: string, limit: number = 10): Promise<PlayerHistoryResponse> => {
-  return await apiGet<PlayerHistoryResponse>(`/player/${playerName}/history?limit=${limit}`);
+export const getPlayerHistory = async (
+  playerName: string, 
+  limit: number = 10,
+  signal?: AbortSignal
+): Promise<PlayerHistoryResponse> => {
+  return await apiGet<PlayerHistoryResponse>(
+    `/player/${playerName}/history?limit=${limit}`,
+    { signal }
+  );
 };
 
 // Obtener métricas de modelos para un jugador
-export const getPlayerModelMetrics = async (playerName: string): Promise<ModelMetricsResponse> => {
-  return await apiGet<ModelMetricsResponse>(`/metrics/${playerName}`);
+export const getPlayerModelMetrics = async (
+  playerName: string,
+  signal?: AbortSignal
+): Promise<ModelMetricsResponse> => {
+  return await apiGet<ModelMetricsResponse>(
+    `/metrics/${playerName}`,
+    { signal }
+  );
 };
