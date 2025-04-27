@@ -48,150 +48,40 @@ def load_historical_data():
 def estandarizar_nombre_equipo(nombre):
     """
     Estandariza nombres de equipos para coincidir con los datos históricos.
-    
-    Asegura que los nombres coincidan exactamente con los valores en la columna 
-    Oponente_Estandarizado del archivo Goleadores_Procesados.csv
     """
-    # Mapeo de nombres de equipos hacia los valores exactos en Oponente_Estandarizado
     mapeo_equipos = {
-        # Variantes de Junior
         'Atlético Junior': 'Junior',
         'Junior': 'Junior',
-        'JUNIOR': 'Junior',
-        'JR FC': 'Junior',
-        'ATLÉTICO JUNIOR': 'Junior',
-        'ATLETICO JUNIOR': 'Junior',
-        
-        # Variantes de América
-        'América': 'CD América',
-        'América de Cali': 'CD América',
-        'CD AMÉRICA': 'CD América',
-        'CD AMERICA': 'CD América',
-        'America': 'CD América',
-        
-        # Variantes de Millonarios
-        'Millonarios': 'Millonarios',
-        'MILLONARIOS': 'Millonarios',
-        'co MILLONARIOS': 'Millonarios',
-        
-        # Variantes de Nacional
         'Nacional': 'Atlético Nacional',
-        'NACIONAL': 'Atlético Nacional',
         'Atlético Nacional': 'Atlético Nacional',
-        'Atletico Nacional': 'Atlético Nacional',
-        
-        # Variantes de Santa Fe
-        'Santa Fe': 'Independiente Santa Fe',
-        'SANTA FE': 'Independiente Santa Fe',
-        'co SANTA FE': 'Independiente Santa Fe',
-        'Independiente Santa Fe': 'Independiente Santa Fe',
-        
-        # Variantes de Tolima
-        'Tolima': 'Deportes Tolima',
-        'TOLIMA': 'Deportes Tolima',
-        'co TOLIMA': 'Deportes Tolima',
-        'Deportes Tolima': 'Deportes Tolima',
-        
-        # Variantes de Medellín
-        'Medellín': 'Independiente Medellín',
-        'Medellin': 'Independiente Medellín',
-        'Independiente': 'Independiente Medellín',
-        'DIM': 'Independiente Medellín',
-        
-        # Variantes de Cali
-        'Cali': 'Deportivo Cali',
-        'AD CALI': 'Deportivo Cali',
-        'Deportivo Cali': 'Deportivo Cali',
-        
-        # Variantes de Pasto
-        'Pasto': 'Deportivo Pasto',
-        'PASTO': 'Deportivo Pasto',
-        'Deportivo Pasto': 'Deportivo Pasto',
-        
-        # Variantes de Once Caldas
-        'Once Caldas': 'Once Caldas',
-        'ONCE CALDAS': 'Once Caldas',
-        'co ONCE CALDAS': 'Once Caldas',
-        
-        # Variantes de Alianza
-        'Alianza': 'Alianza FC',
-        'ALIANZA': 'Alianza FC',
-        
-        # Variantes de Pereira
-        'Pereira': 'Pereira',
-        'PEREIRA': 'Pereira',
-        'DEPORTIVO PEREIRA': 'Pereira',
         'Deportivo Pereira': 'Pereira',
-        
-        # Variantes de Bucaramanga
-        'Bucaramanga': 'Bucaramanga',
-        'CA BUCARAMANGA': 'Bucaramanga',
-        'ATLETICO BUCARAMANGA': 'Bucaramanga',
-        'ATLÉTICO BUCARAMANGA': 'Bucaramanga',
+        'Pereira': 'Pereira',
         'Atlético Bucaramanga': 'Bucaramanga',
-        
-        # Variantes de Chicó
+        'Bucaramanga': 'Bucaramanga',
+        'Santa Fe': 'Independiente Santa Fe',
+        'Independiente Santa Fe': 'Independiente Santa Fe',
+        'Cali': 'Deportivo Cali',
+        'Deportivo Cali': 'Deportivo Cali',
+        'América': 'América de Cali',
+        'América de Cali': 'América de Cali',
+        'Millonarios': 'Millonarios',
+        'Once Caldas': 'Once Caldas',
+        'Águilas Doradas': 'Rionegro',
+        'La Equidad': 'La Equidad',
+        'Envigado': 'Envigado',
+        'Fortaleza': 'Fortaleza CEIF',
+        'Unión Magdalena': 'Unión Magdalena',
+        'Pasto': 'Deportivo Pasto',
+        'Deportivo Pasto': 'Deportivo Pasto',
+        'Tolima': 'Deportes Tolima',
+        'Deportes Tolima': 'Deportes Tolima',
+        'Alianza': 'Alianza FC',
+        'Medellín': 'Independiente Medellín',
         'Chicó': 'Boyacá Chicó',
         'Boyacá Chicó': 'Boyacá Chicó',
-        'BOYACÁ CHICÓ': 'Boyacá Chicó',
-        'BOYACA CHICO': 'Boyacá Chicó',
-        'BOYACÁ PATRIOT': 'Boyacá Chicó',
-        'BOYACA PATRIOT': 'Boyacá Chicó',
-        
-        # Variantes de Envigado
-        'Envigado': 'Envigado',
-        'ENVIGADO': 'Envigado',
-        
-        # Variantes de Fortaleza
-        'Fortaleza': 'Fortaleza CEIF',
-        'FORTALEZA FC': 'Fortaleza CEIF',
-        
-        # Variantes de Rionegro
-        'Rionegro': 'Rionegro',
-        'RIONEGRO': 'Rionegro',
-        'ÁGUILAS DORADAS': 'Rionegro',
-        'AGUILAS DORADAS': 'Rionegro',
-        'Águilas Doradas': 'Rionegro',
-        
-        # Variantes de La Equidad
-        'La Equidad': 'La Equidad',
-        'LA EQUIDAD': 'La Equidad',
-        
-        # Variantes de Unión Magdalena
-        'Unión Magdalena': 'Unión Magdalena',
-        'UNIÓN MAGDALENA': 'Unión Magdalena',
-        'UNION MAGDALENA': 'Unión Magdalena',
-        
-        # Variantes de Jaguares
-        'Jaguares': 'Jaguares',
-        'JAGUARES': 'Jaguares',
-        
-        # Variantes de Cortuluá
-        'Cortuluá': 'Cortuluá',
-        'CORTULUÁ': 'Cortuluá',
-        'CORTULUA': 'Cortuluá',
-        
-        # Variantes de Atlético Huila
-        'Atlético Huila': 'Atlético Huila',
-        'ATLÉTICO HUILA': 'Atlético Huila',
-        'ATLETICO HUILA': 'Atlético Huila',
-        
-        # Variantes de Llaneros
-        'Llaneros': 'Llaneros',
-        'LLANEROS': 'Llaneros'
+        'Llaneros': 'Llaneros'
     }
-    
-    # Si el nombre está en el mapeo, devuelve la versión exacta usada en Oponente_Estandarizado
-    if nombre in mapeo_equipos:
-        return mapeo_equipos[nombre]
-    
-    # Si no se encuentra una coincidencia exacta, intentamos con otras normalizaciones
-    nombre_norm = nombre.strip()  # eliminar espacios en blanco
-    if nombre_norm in mapeo_equipos:
-        return mapeo_equipos[nombre_norm]
-    
-    # Si no hay coincidencia, devolver el nombre original
-    return nombre
+    return mapeo_equipos.get(nombre, nombre)
 
 
 class ModelLoader:
@@ -567,9 +457,8 @@ class PredictionEngine:
                 "disponible": False
             }
         
-        # Verificar si el modelo usa variables exógenas y obtener la lista de variables
+        # Verificar si el modelo usa variables exógenas
         usa_exogenas = model_data.get('modelo_config', {}).get('usa_exogenas', False)
-        variables_exogenas = model_data.get('modelo_config', {}).get('variables_exogenas', [])
         
         if not usa_exogenas:
             return {
@@ -579,83 +468,61 @@ class PredictionEngine:
                 "disponible": True
             }
         
+        # Obtener lista de variables exógenas
+        variables_exogenas = model_data.get('modelo_config', {}).get('variables_exogenas', [])
+        
         # Preparar datos exógenos para predicción
         exog_data = {}
         
-        # 1. Mapear variables básicas desde match_data
-        basic_vars = {
-            'Sede_Local': match_data.get('Sede_Local', 1 if match_data.get('is_home', True) else 0),
-            'Sede_Visitante': match_data.get('Sede_Visitante', 0 if match_data.get('is_home', True) else 1),
-            'Tiros a puerta': match_data.get('Tiros a puerta', match_data.get('shots_on_target')),
-            'Tiros totales': match_data.get('Tiros totales', match_data.get('total_shots')),
-            'Minutos': match_data.get('Minutos', match_data.get('minutes', 90))
-        }
-        
-        # Añadir variables básicas al diccionario
-        for var, value in basic_vars.items():
-            if value is not None:
-                exog_data[var] = value
-        
-        # 2. Calcular Promedio_Historico_vs_Oponente (exactamente como en el código de entrenamiento)
-        opponent_std = match_data.get('Oponente_Estandarizado', '')
-        if not opponent_std and 'opponent' in match_data:
-            opponent_std = self.estandarizar_nombre_equipo(match_data['opponent'])
-        
-        # Filtrar partidos previos contra este oponente
-        hist_vs_opponent = history_df[history_df['Oponente_Estandarizado'] == opponent_std]
-        
-        if len(hist_vs_opponent) > 0:
-            exog_data['Promedio_Historico_vs_Oponente'] = hist_vs_opponent['Goles'].mean()
-        else:
-            # Si no hay historial contra este oponente, usar promedio general reciente
-            recent_history = history_df.sort_values('Fecha', ascending=False).head(5)
-            exog_data['Promedio_Historico_vs_Oponente'] = recent_history['Goles'].mean() if len(recent_history) > 0 else 0.0
-        
-        # 3. Calcular Tendencia_Reciente
-        if len(history_df) >= 5:
-            # Usar los últimos 5 partidos
-            ultimos_partidos = history_df.sort_values('Fecha', ascending=False).head(5)
-            promedio_reciente = ultimos_partidos['Goles'].mean()
-            promedio_general = history_df['Goles'].mean()
-            
-            if promedio_general > 0:
-                exog_data['Tendencia_Reciente'] = promedio_reciente / promedio_general
+        for var in variables_exogenas:
+            if var in match_data:
+                exog_data[var] = match_data[var]
+            elif var == 'Promedio_Historico_vs_Oponente':
+                # Calcular el promedio histórico contra el oponente actual
+                opponent_std = match_data.get('Oponente_Estandarizado', '')
+                hist_vs_opponent = history_df[history_df['Oponente_Estandarizado'] == opponent_std]
+                
+                if len(hist_vs_opponent) > 0:
+                    exog_data[var] = hist_vs_opponent['Goles'].mean()
+                else:
+                    exog_data[var] = 0.0
+            elif var == 'Tendencia_Reciente':
+                # Calcular tendencia basada en los últimos partidos
+                if len(history_df) >= 5:
+                    ultimos_partidos = history_df.tail(5)
+                    promedio_reciente = ultimos_partidos['Goles'].mean()
+                    promedio_general = history_df['Goles'].mean()
+                    
+                    if promedio_general > 0:
+                        exog_data[var] = promedio_reciente / promedio_general
+                    else:
+                        exog_data[var] = 1.0
+                else:
+                    exog_data[var] = 1.0
             else:
-                exog_data['Tendencia_Reciente'] = 1.0
-        else:
-            exog_data['Tendencia_Reciente'] = 1.0
+                # Para otras variables, usar el promedio si está disponible en los datos históricos
+                if var in history_df.columns:
+                    exog_data[var] = history_df[var].mean()
+                else:
+                    exog_data[var] = 0.0
         
-        # 4. Normalizar variables numéricas como en el entrenamiento
+        # Normalizar variables si hay información de normalización
         normalizacion = model_data.get('normalizacion', {})
-        for var in ['Tiros a puerta', 'Tiros totales', 'Minutos']:
+        for var in variables_exogenas:
             if var in normalizacion and var in exog_data:
-                mean_val = normalizacion[var]['mean']
-                std_val = normalizacion[var]['std']
-                if std_val > 0:
+                media = normalizacion[var].get('mean', 0)
+                std = normalizacion[var].get('std', 1)
+                if std > 0:
                     norm_var = f"{var}_norm"
-                    exog_data[norm_var] = (exog_data[var] - mean_val) / std_val
+                    exog_data[norm_var] = (exog_data[var] - media) / std
         
-        # 5. Construir array de variables exógenas en el orden correcto
-        # Verificamos que estemos usando exactamente las mismas variables que se usaron en el entrenamiento
-        if variables_exogenas:
-            # Construir el array en el orden correcto
-            exog_values = [exog_data.get(var, 0) for var in variables_exogenas]
-            exog_array = np.array([exog_values])  # [1, n_features]
+        # Convertir a array para el modelo
+        if exog_data:
+            # Ordenar según las variables del modelo
+            exog_array = np.array([[exog_data.get(var, 0) for var in variables_exogenas]])
         else:
-            # Si no tenemos la lista exacta de variables, usar el orden estándar
-            exog_array = np.array([
-                [
-                    exog_data.get('Tiros a puerta', 0),
-                    exog_data.get('Tiros totales', 0),
-                    exog_data.get('Minutos', 90),
-                    exog_data.get('Sede_Local', 1 if match_data.get('is_home', True) else 0),
-                    exog_data.get('Sede_Visitante', 0 if match_data.get('is_home', True) else 1),
-                    exog_data.get('Promedio_Historico_vs_Oponente', 0),
-                    exog_data.get('Tendencia_Reciente', 1.0)
-                ]
-            ])
+            exog_array = None
         
-        # Devolver resultados
         return {
             "usa_exogenas": True,
             "exog": exog_array,
