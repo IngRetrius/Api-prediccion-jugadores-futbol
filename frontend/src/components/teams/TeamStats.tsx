@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { PlayerStats } from '../../types/models';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Card from '../common/Card';
 
 interface TeamStatsProps {
