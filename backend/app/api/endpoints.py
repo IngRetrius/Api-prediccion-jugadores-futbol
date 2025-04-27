@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from typing import List, Dict, Optional, Any
 import pandas as pd
 from datetime import datetime
-
+import os
 from backend.app.models.model_handler import PredictionEngine, estandarizar_nombre_equipo
 from backend.app.api.validation import (
     PlayerPredictionRequest,
@@ -14,7 +14,7 @@ from backend.app.api.validation import (
     PredictionResponse
 )
 from backend.app.config import AVAILABLE_PLAYERS, HISTORICAL_DATA_FILE, MODEL_WEIGHTS
-
+from loguru import logger
 router = APIRouter()
 prediction_engine = PredictionEngine()
 
@@ -398,7 +398,65 @@ async def get_model_metrics(player_name: str = Path(..., description="Nombre del
             status_code=500,
             detail=f"Error al obtener métricas: {str(e)}"
         )
-
+    
+@router.get("/team-stats", tags=["Datos"])
+async def get_team_stats(
+    team: Optional[str] = Query(None, description="Filtrar por equipo"),
+    tournament: Optional[str] = Query(None, description="Filtrar por torneo")
+):
+    """Obtener estadísticas de jugadores por equipo y torneo."""
+    try:
+        # Importar el directorio de datos
+        from backend.app.config import DATA_DIR
+        import numpy as np
+        import os
+        
+        # Ruta al CSV
+        csv_path = os.path.join(DATA_DIR, "jugadores_unificados_cinco_torneos.csv")
+        
+        # Verificar si el archivo existe
+        if not os.path.exists(csv_path):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Archivo de datos no encontrado"
+            )
+        
+        # Cargar datos
+        df = pd.read_csv(csv_path)
+        
+        # Aplicar filtros si están presentes
+        if team:
+            df = df[df['Team'] == team]
+        
+        if tournament:
+            df = df[df['Torneo'] == tournament]
+        
+        # Obtener listas únicas para filtros
+        unique_teams = df['Team'].unique().tolist()
+        unique_tournaments = df['Torneo'].unique().tolist()
+        
+        # Limpiar valores problemáticos (NaN, Infinity) antes de convertir a JSON
+        # Reemplazar NaN e infinitos con None (que se convertirá en null en JSON)
+        df = df.replace([np.nan, np.inf, -np.inf], None)
+        
+        # Convertir DataFrame a lista de diccionarios para JSON
+        # Usar orient='records' y asegurar valores Python nativos
+        data = df.to_dict(orient='records')
+        
+        return {
+            "data": data,
+            "teams": unique_teams,
+            "tournaments": unique_tournaments,
+            "total_records": len(data)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en team-stats: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al procesar datos de equipos: {str(e)}"
+        )
+    
 @router.get("/status", tags=["Sistema"])
 async def get_system_status():
     """
@@ -458,3 +516,4 @@ async def get_system_status():
             "data_loaded": False,
             "timestamp": datetime.now().isoformat()
         }
+    

@@ -92,3 +92,36 @@ export interface Player {
     player_name: string;
     metrics: Record<string, ModelMetrics>;
   }
+// Añadir a models.ts
+  export interface PlayerStats {
+    Team: string;
+    Name: string;
+    Torneo: string;
+    Goals: number;
+    "Succ. dribbles": number;
+    Tackles: number;
+    Assists: number;
+    "Accurate passes %": number;
+    "Big chances missed": number;
+    "Total shots": number;
+    "Goal conversion %": number;
+    Interceptions: number;
+    Clearances: number;
+    "Errors leading to goal": number;
+    "Big chances created": number;
+    "Accurate passes": number;
+    "Key passes": number;
+    Saves: number;
+    "Clean sheet": number;
+    "Penalties saved": number;
+    "Saves from inside box": number;
+    "Runs out": number;
+    [key: string]: any; // Para acceder dinámicamente a las propiedades
+  }
+
+  export interface TeamStatsResponse {
+    data: PlayerStats[];
+    teams: string[];
+    tournaments: string[];
+    total_records: number;
+  }
