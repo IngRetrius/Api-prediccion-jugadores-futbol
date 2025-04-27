@@ -9,6 +9,7 @@ Una aplicación web que utiliza modelos de aprendizaje automático para predecir
 - **Ensemble inteligente**: Ponderación de modelos para mejorar la precisión de las predicciones
 - **Análisis histórico**: Visualización de estadísticas y tendencias de jugadores
 - **Personalización**: Ajuste de parámetros específicos como minutos jugados, tiros a puerta, y selección de modelos
+- **Dashboard de equipos**: Análisis detallado de estadísticas por equipo y torneo
 
 ## Arquitectura
 
@@ -34,6 +35,24 @@ El proyecto utiliza una arquitectura de cliente-servidor:
 - Python 3.8+
 - Node.js 16+
 - npm o yarn
+
+## Datos del sistema
+
+### Importante: Acceso a los datos
+
+Para que el sistema funcione correctamente, es necesario descargar los archivos de datos desde el siguiente enlace:
+
+[https://drive.google.com/drive/folders/1I6625Qx3AAPfexX5Z3iAv2BhNV-pl-1X?usp=sharing](https://drive.google.com/drive/folders/1I6625Qx3AAPfexX5Z3iAv2BhNV-pl-1X?usp=sharing)
+
+### Instalación de datos
+
+1. Descarga los archivos del enlace anterior
+2. Coloca los archivos descargados en la carpeta: `backend/app/data/`
+3. Asegúrate de que los siguientes archivos estén presentes en esa ubicación:
+   - `jugadores_unificados_cinco_torneos.csv` (para el módulo de estadísticas de equipos)
+   - `Goleadores_Procesados.csv` (para el módulo de predicción de goles)
+
+**Nota**: Sin estos archivos, el sistema no funcionará correctamente. El archivo `Goleadores_Procesados.csv` es esencial para el funcionamiento de los modelos de predicción, mientras que `jugadores_unificados_cinco_torneos.csv` es necesario para el dashboard de estadísticas de equipos.
 
 ## Instalación
 
@@ -70,6 +89,13 @@ Para iniciar el servidor backend:
 python -m backend.app.main
 ```
 
+O alternativamente:
+
+```bash
+cd backend
+uvicorn app.main:app --reload
+```
+
 El servidor estará disponible en `http://localhost:8000`.
 
 ### Frontend
@@ -90,6 +116,7 @@ La aplicación estará disponible en `http://localhost:5173`.
 3. Opcionalmente, configura parámetros adicionales como tiros a puerta o minutos jugados
 4. Haz clic en "Predecir Goles" para obtener la predicción
 5. Explora las diferentes pestañas para ver estadísticas, historial y métricas de modelos
+6. En la pestaña "Equipos", puedes analizar estadísticas detalladas por equipo y torneo
 
 ## Estructura del Proyecto
 
@@ -99,7 +126,7 @@ prediccion-goles/
 │   ├── app/
 │   │   ├── api/          # Endpoints de la API
 │   │   ├── models/       # Modelos de predicción
-│   │   ├── data/         # Datos históricos
+│   │   ├── data/         # Datos históricos (colocar archivos CSV aquí)
 │   │   ├── config.py     # Configuración global
 │   │   └── main.py       # Punto de entrada
 │   └── tests/            # Pruebas unitarias
@@ -135,6 +162,16 @@ Para ejecutar las pruebas del frontend:
 cd frontend
 npm test
 ```
+
+## Modelos de predicción
+
+El sistema utiliza una combinación de tres modelos:
+
+1. **LSTM (Long Short-Term Memory)**: Red neuronal para capturar patrones temporales complejos
+2. **SARIMAX**: Modelo estadístico para series temporales que considera factores externos
+3. **Poisson**: Distribución estadística adaptada para modelar la ocurrencia de goles
+
+Estos tres modelos se combinan en un ensemble para proporcionar predicciones más robustas.
 
 ## Contribuir
 
