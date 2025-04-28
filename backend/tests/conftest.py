@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, patch, MagicMock
 # Agregar directorio raíz al path para poder importar módulos del backend
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from backend.app.main import app
-from backend.app.models.model_handler import PredictionEngine, estandarizar_nombre_equipo
+from app.main import app
+from app.models.model_handler import PredictionEngine, estandarizar_nombre_equipo
 
 
 @pytest.fixture

@@ -5,7 +5,7 @@ import pytest
 import pandas as pd
 from datetime import datetime
 
-from backend.app.models.model_handler import estandarizar_nombre_equipo, load_historical_data
+from app.models.model_handler import estandarizar_nombre_equipo, load_historical_data
 
 
 class TestEquipoStandardization:

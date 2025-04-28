@@ -6,14 +6,14 @@ from typing import List, Dict, Optional, Any
 import pandas as pd
 from datetime import datetime
 import os
-from backend.app.models.model_handler import PredictionEngine, estandarizar_nombre_equipo
-from backend.app.api.validation import (
+from app.models.model_handler import PredictionEngine, estandarizar_nombre_equipo
+from app.api.validation import (
     PlayerPredictionRequest,
     MatchPredictionRequest,
     ModelSelectionRequest,
     PredictionResponse
 )
-from backend.app.config import AVAILABLE_PLAYERS, HISTORICAL_DATA_FILE, MODEL_WEIGHTS
+from app.config import AVAILABLE_PLAYERS, HISTORICAL_DATA_FILE, MODEL_WEIGHTS
 from loguru import logger
 router = APIRouter()
 prediction_engine = PredictionEngine()
@@ -407,7 +407,7 @@ async def get_team_stats(
     """Obtener estadísticas de jugadores por equipo y torneo."""
     try:
         # Importar el directorio de datos
-        from backend.app.config import DATA_DIR
+        from app.config import DATA_DIR
         import numpy as np
         import os
         

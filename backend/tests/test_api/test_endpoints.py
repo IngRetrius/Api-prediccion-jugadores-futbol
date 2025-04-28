@@ -7,7 +7,7 @@ from datetime import date
 from unittest.mock import patch, AsyncMock
 
 # Asegúrate de que este import funcione cuando ejecutes las pruebas
-from backend.app.models.model_handler import estandarizar_nombre_equipo
+from app.models.model_handler import estandarizar_nombre_equipo
 
 
 class TestPlayerEndpoints:
@@ -20,7 +20,7 @@ class TestPlayerEndpoints:
         Verificar que el endpoint /jugadores devuelve la lista correcta de jugadores.
         """
         # Mockear la constante AVAILABLE_PLAYERS
-        monkeypatch.setattr("backend.app.api.endpoints.AVAILABLE_PLAYERS", sample_players)
+        monkeypatch.setattr("app.api.endpoints.AVAILABLE_PLAYERS", sample_players)
         
         # Hacer la petición al endpoint
         response = test_client.get("/api/v1/jugadores")
@@ -36,8 +36,8 @@ class TestPlayerEndpoints:
         """
         # Mockear constantes y métodos necesarios
         player_name = "Hugo_Rodallega"
-        monkeypatch.setattr("backend.app.api.endpoints.AVAILABLE_PLAYERS", [player_name])
-        monkeypatch.setattr("backend.app.api.endpoints.prediction_engine", mock_prediction_engine)
+        monkeypatch.setattr("app.api.endpoints.AVAILABLE_PLAYERS", [player_name])
+        monkeypatch.setattr("app.api.endpoints.prediction_engine", mock_prediction_engine)
         
         # Hacer la petición al endpoint
         response = test_client.get(f"/api/v1/player/{player_name}/history?limit=5")
@@ -57,7 +57,7 @@ class TestPlayerEndpoints:
         Verificar que el endpoint devuelve un error cuando el jugador no existe.
         """
         # Configurar lista de jugadores disponibles
-        monkeypatch.setattr("backend.app.api.endpoints.AVAILABLE_PLAYERS", ["Hugo_Rodallega", "Carlos_Bacca"])
+        monkeypatch.setattr("app.api.endpoints.AVAILABLE_PLAYERS", ["Hugo_Rodallega", "Carlos_Bacca"])
         
         # Usar un nombre de jugador que no existe
         player_name = "Jugador_Inexistente"
@@ -81,7 +81,7 @@ class TestTeamEndpoints:
         Verificar que el endpoint /equipos devuelve la lista correcta de equipos.
         """
         # Mockear el motor de predicción
-        monkeypatch.setattr("backend.app.api.endpoints.prediction_engine", mock_prediction_engine)
+        monkeypatch.setattr("app.api.endpoints.prediction_engine", mock_prediction_engine)
         
         # Hacer la petición al endpoint
         response = test_client.get("/api/v1/equipos")
@@ -103,7 +103,7 @@ class TestPredictionEndpoints:
         Verificar que el endpoint /predict/player realiza una predicción correcta.
         """
         # Mockear constantes y métodos necesarios
-        monkeypatch.setattr("backend.app.api.endpoints.AVAILABLE_PLAYERS", sample_players)
+        monkeypatch.setattr("app.api.endpoints.AVAILABLE_PLAYERS", sample_players)
         
         # Asegurarse de que el jugador en la petición es uno válido
         player_prediction_request["player_name"] = sample_players[0]
@@ -132,7 +132,7 @@ class TestPredictionEndpoints:
                 }
         
         # Aplicar el mock
-        monkeypatch.setattr("backend.app.api.endpoints.prediction_engine", MockEngine())
+        monkeypatch.setattr("app.api.endpoints.prediction_engine", MockEngine())
         
         # Hacer la petición al endpoint
         response = test_client.post("/api/v1/predict/player", json=player_prediction_request)
@@ -161,7 +161,7 @@ class TestPredictionEndpoints:
         """
         # Configurar lista de jugadores disponibles (no incluye el jugador inexistente)
         sample_players = ["Hugo_Rodallega", "Carlos_Bacca"]
-        monkeypatch.setattr("backend.app.api.endpoints.AVAILABLE_PLAYERS", sample_players)
+        monkeypatch.setattr("app.api.endpoints.AVAILABLE_PLAYERS", sample_players)
         
         # Modificar la solicitud para usar un jugador inexistente
         invalid_request = player_prediction_request.copy()
@@ -181,7 +181,7 @@ class TestPredictionEndpoints:
         Verificar que el endpoint /predict/match realiza una predicción correcta.
         """
         # Mockear el motor de predicción
-        monkeypatch.setattr("backend.app.api.endpoints.prediction_engine", mock_prediction_engine)
+        monkeypatch.setattr("app.api.endpoints.prediction_engine", mock_prediction_engine)
         
         # Hacer la petición al endpoint
         response = test_client.post("/api/v1/predict/match", json=match_prediction_request)
@@ -209,8 +209,8 @@ class TestSystemEndpoints:
         Verificar que el endpoint /status devuelve el estado del sistema.
         """
         # Mockear el motor de predicción
-        monkeypatch.setattr("backend.app.api.endpoints.prediction_engine", mock_prediction_engine)
-        monkeypatch.setattr("backend.app.api.endpoints.AVAILABLE_PLAYERS", ["Hugo_Rodallega", "Carlos_Bacca"])
+        monkeypatch.setattr("app.api.endpoints.prediction_engine", mock_prediction_engine)
+        monkeypatch.setattr("app.api.endpoints.AVAILABLE_PLAYERS", ["Hugo_Rodallega", "Carlos_Bacca"])
         
         # Hacer la petición al endpoint
         response = test_client.get("/api/v1/status")

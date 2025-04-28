@@ -86,7 +86,7 @@ Para que el sistema funcione correctamente, es necesario descargar los archivos 
 Para iniciar el servidor backend:
 
 ```bash
-python -m backend.app.main
+python -m app.main
 ```
 
 O alternativamente:
