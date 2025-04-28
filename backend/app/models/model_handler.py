@@ -1,17 +1,19 @@
 """
 Gestión de modelos predictivos y procesamiento de datos.
+Versión mejorada para alinear predicciones con el entrenamiento original.
 """
 import os
 import pickle
 import numpy as np
 import pandas as pd
 from loguru import logger
-from typing import Dict, List, Tuple, Union, Optional
+from typing import Dict, List, Tuple, Union, Optional, Any
 import time
 from datetime import datetime, timedelta
-from scipy.stats import poisson
+from scipy.stats import poisson, linregress
 import keras
 from keras.models import load_model 
+from collections import defaultdict
 try:
     import tensorflow as tf
     HAS_TF = True
@@ -21,7 +23,7 @@ except ImportError:
         raise ImportError("TensorFlow no está disponible") 
 from sklearn.preprocessing import RobustScaler
 
-from backend.app.config import (
+from app.config import (
     LSTM_MODELS_DIR,
     SARIMAX_MODELS_DIR,
     POISSON_MODELS_DIR,
@@ -84,6 +86,209 @@ def estandarizar_nombre_equipo(nombre):
     return mapeo_equipos.get(nombre, nombre)
 
 
+# Nuevas funciones auxiliares para mejorar la predicción
+def calcular_tendencia_robusta(serie, ventanas=[3, 5, 7]):
+    """
+    Calcula la tendencia de una serie de forma más robusta usando múltiples 
+    ventanas temporales y promediando los resultados (idéntico al entrenamiento).
+    
+    Args:
+        serie: Serie de datos
+        ventanas: Tamaños de ventana para calcular la tendencia
+    
+    Returns:
+        Serie con la tendencia calculada
+    """
+    tendencias = pd.Series(0, index=serie.index)
+    pesos = {3: 0.5, 5: 0.3, 7: 0.2}  # Pesos para diferentes ventanas
+    
+    for ventana in ventanas:
+        if len(serie) >= ventana:
+            for i in range(ventana, len(serie) + 1):
+                try:
+                    # Obtener datos de la ventana actual
+                    datos_ventana = serie.iloc[i-ventana:i].values
+                    x = np.arange(ventana)
+                    # Regresión lineal para calcular la pendiente
+                    slope, _, _, _, _ = linregress(x, datos_ventana)
+                    idx = serie.index[i-1]
+                    tendencias.loc[idx] += slope * pesos[ventana]
+                except:
+                    pass
+    
+    return tendencias
+
+
+def redondeo_probabilistico_mejorado(predicciones, varianza=0.1):
+    """
+    Implementa el redondeo probabilístico con varianza ajustable, 
+    idéntico al usado en entrenamiento.
+    
+    Args:
+        predicciones: Array de predicciones continuas
+        varianza: Varianza para el muestreo aleatorio
+    
+    Returns:
+        Array de predicciones enteras
+    """
+    predicciones_redondeadas = []
+    
+    for pred in predicciones:
+        # Asegurar que no sea negativo
+        pred = max(0, pred)
+        
+        # Parte entera
+        parte_entera = int(np.floor(pred))
+        
+        # Parte decimal como probabilidad, ajustada por la varianza
+        parte_decimal = pred - parte_entera
+        
+        # Ajustar probabilidad con varianza (más robusto)
+        prob_ajustada = np.clip(parte_decimal + np.random.normal(0, varianza), 0, 1)
+        
+        # Redondeo probabilístico
+        if np.random.random() < prob_ajustada:
+            resultado = parte_entera + 1
+        else:
+            resultado = parte_entera
+            
+        predicciones_redondeadas.append(resultado)
+            
+    return np.array(predicciones_redondeadas)
+
+
+def calcular_factores_oponente(df_jugador, oponente_actual=None):
+    """
+    Calcula factores avanzados para oponentes, incluyendo rendimiento histórico
+    y similitud entre equipos (similar al entrenamiento).
+    
+    Args:
+        df_jugador: DataFrame con los datos del jugador
+        oponente_actual: Nombre del oponente actual (opcional)
+    
+    Returns:
+        DataFrame actualizado con factores de oponente y factor específico para el oponente actual
+    """
+    # Inicializar factor básico
+    df_jugador['Factor_Oponente'] = 1.0
+    factor_oponente_actual = 1.0
+    
+    # Calcular el factor tradicional basado en historial directo
+    oponentes_unicos = df_jugador['Oponente_Estandarizado'].unique()
+    
+    for oponente in oponentes_unicos:
+        df_oponente = df_jugador[df_jugador['Oponente_Estandarizado'] == oponente].copy()
+        
+        for idx, row in df_oponente.iterrows():
+            fecha_actual = row['Fecha']
+            # Historial directo contra este oponente
+            hist_directo = df_oponente[(df_oponente['Fecha'] < fecha_actual)]
+            
+            factor = 1.0
+            if len(hist_directo) > 0:
+                promedio_vs_oponente = hist_directo['Goles'].mean()
+                # Normalizar para crear un factor multiplicativo
+                factor = (promedio_vs_oponente + 1) / (df_jugador['Goles'].mean() + 1)
+                
+                # Dar más peso a partidos recientes (últimos 3)
+                hist_reciente = hist_directo.sort_values('Fecha').tail(3)
+                if len(hist_reciente) > 0:
+                    factor_reciente = (hist_reciente['Goles'].mean() + 1) / (df_jugador['Goles'].mean() + 1)
+                    # Combinar factor histórico (peso 0.7) y reciente (peso 0.3)
+                    factor = 0.7 * factor + 0.3 * factor_reciente
+            
+            df_jugador.loc[idx, 'Factor_Oponente'] = factor
+            
+            # Si es el oponente actual, guardar el factor
+            if oponente == oponente_actual:
+                factor_oponente_actual = factor
+    
+    return df_jugador, factor_oponente_actual
+
+
+def crear_secuencias(df, caracteristicas, ventana=3, include_labels=False):
+    """
+    Crea secuencias para el modelo LSTM, igual que en el entrenamiento.
+    
+    Args:
+        df: DataFrame con datos históricos
+        caracteristicas: Lista de características a incluir
+        ventana: Número de partidos anteriores a considerar
+        include_labels: Si se deben incluir etiquetas (False para predicción)
+    
+    Returns:
+        Tupla con X, y, fechas, oponentes
+    """
+    if df.empty:
+        return np.array([]), np.array([]), [], []
+    
+    X, y, fechas, oponentes = [], [], [], []
+    
+    # Si solo necesitamos X para predecir (sin etiquetas)
+    if not include_labels:
+        # Usar los últimos 'ventana' registros
+        if len(df) >= ventana:
+            ultimos_datos = df.iloc[-ventana:][caracteristicas].values
+            X.append(ultimos_datos)
+            fechas.append(df.iloc[-1]['Fecha'])
+            oponentes.append(df.iloc[-1]['Oponente_Estandarizado'])
+    else:
+        # Crear secuencias para entrenamiento/validación
+        for i in range(ventana, len(df)):
+            # Secuencia de ventana partidos anteriores
+            X.append(df.iloc[i-ventana:i][caracteristicas].values)
+            
+            # Variable objetivo: Número exacto de goles
+            y.append(df.iloc[i]['Goles'])
+            
+            # Información adicional para análisis
+            fechas.append(df.iloc[i]['Fecha'])
+            oponentes.append(df.iloc[i]['Oponente_Estandarizado'])
+    
+    return np.array(X), np.array(y), fechas, oponentes
+
+
+# Clase para mantener un caché de contexto de predicciones por jugador
+class PredictionContext:
+    """Mantiene un contexto de predicciones previas para cada jugador."""
+    
+    def __init__(self, max_context_size=10):
+        """Inicializar el contexto de predicciones."""
+        self.contexts = defaultdict(list)
+        self.max_context_size = max_context_size
+    
+    def add_prediction(self, player_name, match_data, prediction_result):
+        """
+        Añadir una predicción al contexto del jugador.
+        
+        Args:
+            player_name: Nombre del jugador
+            match_data: Datos del partido
+            prediction_result: Resultado de la predicción
+        """
+        context = self.contexts[player_name]
+        context.append({
+            "match_data": match_data.copy() if isinstance(match_data, dict) else match_data,
+            "prediction": prediction_result.get("raw_prediction", 0) if isinstance(prediction_result, dict) else prediction_result,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Mantener solo los últimos N contextos
+        if len(context) > self.max_context_size:
+            context.pop(0)
+    
+    def get_context(self, player_name):
+        """Obtener el contexto de predicciones de un jugador."""
+        return self.contexts.get(player_name, [])
+    
+    def clear_context(self, player_name=None):
+        """Limpiar el contexto de predicciones."""
+        if player_name is None:
+            self.contexts.clear()
+        else:
+            self.contexts[player_name] = []
+
+
 class ModelLoader:
     """Clase para cargar y gestionar los modelos predictivos."""
     
@@ -129,6 +334,19 @@ class ModelLoader:
             pkl_model_path = os.path.join(model_dir, pkl_file_name)
             h5_model_path = os.path.join(model_dir, h5_file_name)
             
+            # Buscar modelo específico del tipo si existe
+            if not os.path.exists(pkl_model_path):
+                # Buscar modelos alternativos: simple, bidireccional, gru, ensemble
+                model_types = ["simple", "bidireccional", "gru", "ensemble"]
+                for tipo in model_types:
+                    alt_pkl = os.path.join(model_dir, f"{player_name}_{tipo}.pkl")
+                    alt_h5 = os.path.join(model_dir, f"{player_name}_{tipo}.h5")
+                    if os.path.exists(alt_pkl) and os.path.exists(alt_h5):
+                        pkl_model_path = alt_pkl
+                        h5_model_path = alt_h5
+                        logger.info(f"Encontrado modelo LSTM alternativo: {tipo} para {player_name}")
+                        break
+            
             # Si no existe el archivo .pkl pero sí el .h5, crear una estructura básica
             if not os.path.exists(pkl_model_path) and os.path.exists(h5_model_path):
                 try:
@@ -141,7 +359,10 @@ class ModelLoader:
                                 "ventana": DEFAULT_WINDOW_SIZE,
                                 "caracteristicas": [
                                     'Tiros_a_puerta', 'Tiros_totales', 'Minutos',
-                                    'Sede_Local', 'Sede_Visitante', 'Es_FinDeSemana'
+                                    'Sede_Local', 'Sede_Visitante', 'Factor_Oponente', 
+                                    'Goles_Prom_3', 'Goles_Prom_5',
+                                    'Marco_Ultimo_Partido', 'Goles_Ult_3', 'Tendencia_Robusta',
+                                    'Es_FinDeSemana', 'Racha_Con_Gol'
                                 ]
                             }
                         }
@@ -210,14 +431,20 @@ class ModelLoader:
             model_data["disponible"] = True
             
             # Cargar modelo complementario si es LSTM (modelo H5)
-            if model_type == "lstm" and "tipo_modelo" in model_data:
-                h5_file = f"{player_name}_{model_data['tipo_modelo']}.h5"
+            if model_type == "lstm":
+                tipo_modelo = model_data.get('tipo_modelo', model_data.get('modelo_config', {}).get('tipo_modelo', 'simple'))
+                h5_file = f"{player_name}_{tipo_modelo}.h5"
                 h5_path = os.path.join(model_dir, h5_file)
+                
+                # Si no existe este H5, buscar el H5 general
+                if not os.path.exists(h5_path):
+                    h5_path = os.path.join(model_dir, f"lstm_{player_name}.h5")
+                    
                 if os.path.exists(h5_path):
                     try:
                         if HAS_TF:
                             model_data["modelo_keras"] = load_model(h5_path)
-                            logger.info(f"Modelo Keras para {player_name} cargado correctamente")
+                            logger.info(f"Modelo Keras para {player_name} cargado correctamente: {h5_path}")
                         else:
                             logger.warning("TensorFlow no está disponible, no se puede cargar el modelo LSTM")
                             model_data["modelo_keras"] = None
@@ -232,21 +459,27 @@ class ModelLoader:
                     model_data["error_keras"] = "Archivo H5 no encontrado"
                 
                 # Cargar scaler para normalización
-                scaler_file = f"{player_name}_{model_data['tipo_modelo']}_scaler.pkl"
+                scaler_file = f"{player_name}_{tipo_modelo}_scaler.pkl"
                 scaler_path = os.path.join(model_dir, scaler_file)
+                
+                # Si no existe este scaler, buscar el scaler general
+                if not os.path.exists(scaler_path):
+                    scaler_path = os.path.join(model_dir, f"lstm_{player_name}_scaler.pkl")
+                
                 if os.path.exists(scaler_path):
                     try:
                         with open(scaler_path, 'rb') as f:
                             model_data["scaler"] = pickle.load(f)
-                        logger.info(f"Scaler para {player_name} cargado correctamente")
+                        logger.info(f"Scaler para {player_name} cargado correctamente: {scaler_path}")
                     except Exception as e:
                         logger.error(f"Error al cargar scaler: {str(e)}")
                         model_data["scaler"] = None
                 else:
+                    logger.warning(f"Archivo scaler no encontrado: {scaler_path}")
                     model_data["scaler"] = None
                     
                 # Verificar si el modelo LSTM está realmente disponible
-                if model_data["modelo_keras"] is None:
+                if model_data.get("modelo_keras") is None and model_data.get("modelo_entrenado") is None:
                     model_data["disponible"] = False
                     model_data["error"] = model_data.get("error_keras", "Modelo Keras no disponible")
             
@@ -276,6 +509,7 @@ class PredictionEngine:
         """Inicializar el motor de predicción."""
         self.model_loader = ModelLoader()
         self.historical_data = None
+        self.prediction_context = PredictionContext(max_context_size=10)
         
     async def load_data(self):
         """Cargar datos históricos si no están cargados."""
@@ -319,18 +553,30 @@ class PredictionEngine:
         # Obtener datos históricos
         player_history = await self.get_player_historical_data(player_name)
         
+        # Obtener contexto de predicciones previas
+        prediction_context = self.prediction_context.get_context(player_name)
+        
         # Características según el modelo
         if model_type == "lstm":
-            return await self._prepare_lstm_features(player_name, player_history, match_data)
+            return await self._prepare_lstm_features(player_name, player_history, match_data, prediction_context)
         elif model_type == "sarimax":
-            return await self._prepare_sarimax_features(player_name, player_history, match_data)
+            return await self._prepare_sarimax_features(player_name, player_history, match_data, prediction_context)
         elif model_type == "poisson":
-            return await self._prepare_poisson_features(player_name, player_history, match_data)
+            return await self._prepare_poisson_features(player_name, player_history, match_data, prediction_context)
         else:
             raise ValueError(f"Tipo de modelo no válido: {model_type}")
     
-    async def _prepare_lstm_features(self, player_name: str, history_df: pd.DataFrame, match_data: dict):
-        """Preparar características para modelo LSTM."""
+    async def _prepare_lstm_features(
+        self, 
+        player_name: str, 
+        history_df: pd.DataFrame, 
+        match_data: dict, 
+        prediction_context: List[dict] = None
+    ):
+        """
+        Preparar características para modelo LSTM, emulando el procesamiento 
+        secuencial usado en entrenamiento.
+        """
         # Cargar modelo para obtener configuración
         model_data = await self.model_loader.load_model("lstm", player_name)
         
@@ -341,23 +587,23 @@ class PredictionEngine:
                 "disponible": False
             }
         
-        # Obtener ventana y características del modelo
-        window_size = model_data.get('modelo_config', {}).get('ventana', DEFAULT_WINDOW_SIZE)
+        # Obtener configuración del modelo
+        model_config = model_data.get('modelo_config', {})
+        window_size = model_config.get('ventana', DEFAULT_WINDOW_SIZE)
         
         # Características del modelo basadas en el código de entrenamiento
         default_features = [
             'Tiros_a_puerta', 'Tiros_totales', 'Minutos',
-            'Sede_Local', 'Sede_Visitante',
-            'Promedio_Historico_vs_Oponente', 'Tendencia_Reciente',
+            'Sede_Local', 'Sede_Visitante', 'Factor_Oponente', 
+            'Goles_Prom_3', 'Goles_Prom_5',
             'Marco_Ultimo_Partido', 'Goles_Ult_3', 'Tendencia_Robusta',
-            'Es_FinDeSemana', 'Racha_Con_Gol'
+            'Es_FinDeSemana', 'Racha_Con_Gol', 'Goles_Prom_7'
         ]
         
         # Usar características del modelo si están disponibles
-        model_features = model_data.get('modelo_config', {}).get('caracteristicas', default_features)
+        model_features = model_config.get('caracteristicas', default_features)
         
         # Preparar las características adicionales basadas en el historial
-        # Obtener datos de partidos previos
         df_work = history_df.copy()
         
         # Normalizar nombres de columnas (convertir espacios a guiones bajos)
@@ -367,72 +613,104 @@ class PredictionEngine:
                 rename_dict[col] = col.replace(' ', '_')
         if rename_dict:
             df_work = df_work.rename(columns=rename_dict)
+            
+        # Incorporar predicciones anteriores al historial si hay contexto
+        if prediction_context and len(prediction_context) > 0:
+            # Ordenar contexto por timestamp
+            sorted_context = sorted(prediction_context, key=lambda x: x.get('timestamp', ''))
+            
+            # Crear filas temporales con predicciones previas
+            temp_rows = []
+            for pred_ctx in sorted_context:
+                ctx_match = pred_ctx.get('match_data', {})
+                ctx_pred = pred_ctx.get('prediction', 0)
+                
+                # Crear una nueva fila con la predicción como si fuera un resultado real
+                new_row = match_data.copy()  # Usar estructura de dato actual como plantilla
+                new_row['Fecha'] = pd.to_datetime(ctx_match.get('Fecha', datetime.now()))
+                new_row['Goles'] = ctx_pred
+                temp_rows.append(new_row)
+            
+            # Si hay filas temporales, añadirlas al DataFrame
+            if temp_rows:
+                # Convertir a DataFrame y asegurar compatibilidad de columnas
+                temp_df = pd.DataFrame(temp_rows)
+                
+                # Asegurar que tenga las mismas columnas que df_work
+                for col in df_work.columns:
+                    if col not in temp_df.columns:
+                        temp_df[col] = 0
+                
+                # Añadir solo las columnas que existen en df_work
+                temp_df = temp_df[df_work.columns.intersection(temp_df.columns)]
+                
+                # Concatenar con el historial original
+                df_work = pd.concat([df_work, temp_df]).sort_values('Fecha')
+                logger.info(f"Incorporadas {len(temp_rows)} predicciones previas al historial de {player_name}")
         
-        # 1. Preparar datos para el último partido (para predecir el siguiente)
-        # Promedios móviles de goles
+        # 1. Preparar variables específicas del modelo LSTM
+        # Promedios móviles de goles (múltiples ventanas)
         ventanas = [3, 5, 7, 10]
         for ventana in ventanas:
             if len(df_work) >= ventana:
                 col_name = f'Goles_Prom_{ventana}'
                 df_work[col_name] = df_work['Goles'].rolling(window=ventana, min_periods=1).mean()
         
-        # Rachas de goles
+        # Variables para marcar partidos recientes
         if 'Goles' in df_work.columns:
             df_work['Marco_Ultimo_Partido'] = df_work['Goles'].shift(1).fillna(0)
             df_work['Goles_Ult_3'] = df_work['Goles'].rolling(window=3, min_periods=1).sum()
             df_work['Goles_Ult_5'] = df_work['Goles'].rolling(window=5, min_periods=1).sum()
             
-            # Secuencias de partidos con/sin gol
+            # Secuencias de partidos con/sin gol (racha)
             goles_binario = (df_work['Goles'] > 0).astype(int)
             df_work['Racha_Con_Gol'] = goles_binario.groupby((goles_binario != goles_binario.shift()).cumsum()).cumcount()
         
-        # Factor de oponente historial
-        df_work['Factor_Oponente'] = 1.0
+        # Factor de oponente usando la función mejorada
         opponent_std = match_data.get('Oponente_Estandarizado', '')
+        df_work, factor_oponente = calcular_factores_oponente(df_work, opponent_std)
+        match_data['Factor_Oponente'] = factor_oponente
         
-        # Filtrar partidos previos contra el mismo oponente
-        hist_vs_opponent = df_work[df_work['Oponente_Estandarizado'] == opponent_std]
-        
-        if len(hist_vs_opponent) > 0:
-            promedio_vs_oponente = hist_vs_opponent['Goles'].mean()
-            # Normalizar para crear un factor multiplicativo
-            factor = (promedio_vs_oponente + 1) / (df_work['Goles'].mean() + 1)
-            match_data['Factor_Oponente'] = factor
-        else:
-            match_data['Factor_Oponente'] = 1.0
-        
+        # Calcular tendencia robusta
+        if 'Goles' in df_work.columns:
+            df_work['Tendencia_Robusta'] = calcular_tendencia_robusta(df_work['Goles'])
+            
+            # Si no hay suficientes datos para calcular tendencia, usar 0
+            if df_work['Tendencia_Robusta'].isna().all():
+                df_work['Tendencia_Robusta'] = 0
+                
         # Agregar características de día de la semana
         match_data['Es_FinDeSemana'] = 0
-        if 'Fecha' in match_data and isinstance(match_data['Fecha'], datetime):
+        if 'Fecha' in match_data and isinstance(match_data['Fecha'], (datetime, pd.Timestamp)):
             weekday = match_data['Fecha'].weekday()
             match_data['Es_FinDeSemana'] = 1 if weekday >= 4 else 0
         
-        # Calcular tendencia reciente basada en los últimos partidos
-        if len(df_work) >= 5:
-            ultimos_partidos = df_work.tail(5)
-            promedio_reciente = ultimos_partidos['Goles'].mean()
-            promedio_general = df_work['Goles'].mean()
-            
-            if promedio_general > 0:
-                tendencia = promedio_reciente / promedio_general
-            else:
-                tendencia = 1.0
-            
-            match_data['Tendencia_Reciente'] = tendencia
-        else:
-            match_data['Tendencia_Reciente'] = 1.0
-        
         # 2. Crear la matriz de características para LSTM
-        # Tomar los últimos 'window_size' partidos
+        # Generar una fila temporal con los datos del partido a predecir
+        temp_match = match_data.copy()
+        
+        # Asegurar que todas las características necesarias estén presentes
+        for feat in model_features:
+            if feat not in temp_match and feat in df_work.columns:
+                # Tomar el último valor disponible
+                if len(df_work) > 0:
+                    temp_match[feat] = df_work[feat].iloc[-1] if not df_work[feat].isna().all() else 0
+                else:
+                    temp_match[feat] = 0
+        
+        # 3. Crear la secuencia para el modelo LSTM
+        # Usar el método de crear_secuencias del entrenamiento
         if len(df_work) >= window_size:
             # Seleccionar solo características disponibles
             available_features = [f for f in model_features if f in df_work.columns]
             
             # Crear secuencia para el modelo
-            window_data = df_work[available_features].values[-window_size:]
+            X, _, fechas, oponentes = crear_secuencias(
+                df_work, available_features, ventana=window_size, include_labels=False
+            )
             
             return {
-                "X": np.array([window_data]),
+                "X": X,
                 "features": available_features,
                 "match_data": match_data,
                 "historical_data": df_work,
@@ -445,8 +723,17 @@ class PredictionEngine:
                 "disponible": False
             }
     
-    async def _prepare_sarimax_features(self, player_name: str, history_df: pd.DataFrame, match_data: dict):
-        """Preparar características para modelo SARIMAX."""
+    async def _prepare_sarimax_features(
+        self, 
+        player_name: str, 
+        history_df: pd.DataFrame, 
+        match_data: dict,
+        prediction_context: List[dict] = None
+    ):
+        """
+        Preparar características para modelo SARIMAX, considerando series temporales
+        y predicciones anteriores.
+        """
         # Cargar modelo para obtener configuración
         model_data = await self.model_loader.load_model("sarimax", player_name)
         
@@ -468,53 +755,207 @@ class PredictionEngine:
                 "disponible": True
             }
         
+        # Preparar DataFrame de trabajo
+        df_work = history_df.copy()
+        
+        # Normalizar nombres de columnas
+        rename_dict = {}
+        for col in df_work.columns:
+            if ' ' in col:
+                rename_dict[col] = col.replace(' ', '_')
+        if rename_dict:
+            df_work = df_work.rename(columns=rename_dict)
+            
+        # Incorporar predicciones anteriores al historial si hay contexto
+        if prediction_context and len(prediction_context) > 0:
+            # Ordenar contexto por timestamp
+            sorted_context = sorted(prediction_context, key=lambda x: x.get('timestamp', ''))
+            
+            # Crear filas temporales con predicciones previas
+            temp_rows = []
+            for pred_ctx in sorted_context:
+                ctx_match = pred_ctx.get('match_data', {})
+                ctx_pred = pred_ctx.get('prediction', 0)
+                
+                # Crear una nueva fila con la predicción como si fuera un resultado real
+                new_row = {}
+                for key, value in ctx_match.items():
+                    if key in df_work.columns:
+                        new_row[key] = value
+                
+                new_row['Fecha'] = pd.to_datetime(ctx_match.get('Fecha', datetime.now()))
+                new_row['Goles'] = ctx_pred
+                temp_rows.append(new_row)
+            
+            # Si hay filas temporales, añadirlas al DataFrame
+            if temp_rows:
+                # Convertir a DataFrame y asegurar compatibilidad de columnas
+                temp_df = pd.DataFrame(temp_rows)
+                
+                # Añadir solo las columnas que existen en df_work
+                for col in df_work.columns:
+                    if col not in temp_df.columns:
+                        temp_df[col] = None
+                
+                temp_df = temp_df[df_work.columns.intersection(temp_df.columns)]
+                
+                # Concatenar con el historial original y ordenar por fecha
+                df_work = pd.concat([df_work, temp_df]).sort_values('Fecha')
+                logger.info(f"Incorporadas {len(temp_rows)} predicciones previas al historial SARIMAX de {player_name}")
+        
         # Obtener lista de variables exógenas
         variables_exogenas = model_data.get('modelo_config', {}).get('variables_exogenas', [])
         
         # Preparar datos exógenos para predicción
         exog_data = {}
         
+        # MEJORA: Asegurar que las características clave estén disponibles
+        # Si match_data no tiene estas características, estimarlas desde el historial
+        caracteristicas_clave = ['Tiros_a_puerta', 'Tiros_totales', 'Minutos']
+        
+        # Añadir caractéristicas clave si no están presentes
+        for caracteristica in caracteristicas_clave:
+            # Verificar tanto con espacios como con guiones bajos
+            caract_con_espacio = caracteristica.replace('_', ' ')
+            caract_con_guion = caracteristica.replace(' ', '_')
+            
+            # Si no está en match_data, intentar estimarla
+            if caracteristica not in match_data and caract_con_espacio not in match_data and caract_con_guion not in match_data:
+                # Buscar en el historial
+                if caracteristica in df_work.columns:
+                    # Calcular promedio de últimos 5 partidos si hay suficientes
+                    if len(df_work) >= 5:
+                        valor_estimado = df_work[caracteristica].tail(5).mean()
+                    else:
+                        valor_estimado = df_work[caracteristica].mean()
+                    
+                    # Si sigue siendo NaN, usar valores típicos por defecto
+                    if pd.isna(valor_estimado):
+                        if caracteristica == 'Tiros_a_puerta':
+                            valor_estimado = 1.5
+                        elif caracteristica == 'Tiros_totales':
+                            valor_estimado = 2.5
+                        elif caracteristica == 'Minutos':
+                            valor_estimado = 90.0
+                        else:
+                            valor_estimado = 0.0
+                            
+                # Si no está en el historial, usar valores por defecto
+                else:
+                    if caracteristica == 'Tiros_a_puerta':
+                        valor_estimado = 1.5
+                    elif caracteristica == 'Tiros_totales':
+                        valor_estimado = 2.5
+                    elif caracteristica == 'Minutos':
+                        valor_estimado = 90.0
+                    else:
+                        valor_estimado = 0.0
+                
+                # Añadir a match_data
+                match_data[caracteristica] = valor_estimado
+                logger.info(f"Característica '{caracteristica}' estimada para {player_name}: {valor_estimado}")
+        
+        # Características calculadas automáticamente
+        # 1. Calcular promedios móviles
+        if len(df_work) > 0:
+            df_work['Goles_Prom_3'] = df_work['Goles'].rolling(window=3, min_periods=1).mean()
+            df_work['Goles_Prom_5'] = df_work['Goles'].rolling(window=5, min_periods=1).mean()
+        
+        # 2. Calcular factores de oponente
+        opponent_std = match_data.get('Oponente_Estandarizado', '')
+        df_work, factor_oponente = calcular_factores_oponente(df_work, opponent_std)
+        match_data['Factor_Oponente'] = factor_oponente
+        
+        # 3. Calcular tendencia reciente
+        if len(df_work) >= 5:
+            ultimos_partidos = df_work.tail(5)
+            promedio_reciente = ultimos_partidos['Goles'].mean()
+            promedio_general = df_work['Goles'].mean()
+            
+            if promedio_general > 0:
+                tendencia = promedio_reciente / promedio_general
+            else:
+                tendencia = 1.0
+            
+            match_data['Tendencia_Reciente'] = tendencia
+        else:
+            match_data['Tendencia_Reciente'] = 1.0
+            
+        # 4. Calcular promedio histórico vs oponente
+        hist_vs_opponent = df_work[df_work['Oponente_Estandarizado'] == opponent_std]
+        if len(hist_vs_opponent) > 0:
+            promedio_vs_oponente = hist_vs_opponent['Goles'].mean()
+            match_data['Promedio_Historico_vs_Oponente'] = promedio_vs_oponente
+        else:
+            match_data['Promedio_Historico_vs_Oponente'] = df_work['Goles'].mean() if len(df_work) > 0 else 0.0
+        
+        # Preparar datos exógenos según las variables del modelo
         for var in variables_exogenas:
             if var in match_data:
                 exog_data[var] = match_data[var]
             elif var == 'Promedio_Historico_vs_Oponente':
-                # Calcular el promedio histórico contra el oponente actual
-                opponent_std = match_data.get('Oponente_Estandarizado', '')
-                hist_vs_opponent = history_df[history_df['Oponente_Estandarizado'] == opponent_std]
-                
-                if len(hist_vs_opponent) > 0:
-                    exog_data[var] = hist_vs_opponent['Goles'].mean()
-                else:
-                    exog_data[var] = 0.0
+                exog_data[var] = match_data.get('Promedio_Historico_vs_Oponente', 0.0)
             elif var == 'Tendencia_Reciente':
-                # Calcular tendencia basada en los últimos partidos
-                if len(history_df) >= 5:
-                    ultimos_partidos = history_df.tail(5)
-                    promedio_reciente = ultimos_partidos['Goles'].mean()
-                    promedio_general = history_df['Goles'].mean()
-                    
-                    if promedio_general > 0:
-                        exog_data[var] = promedio_reciente / promedio_general
-                    else:
-                        exog_data[var] = 1.0
-                else:
-                    exog_data[var] = 1.0
+                exog_data[var] = match_data.get('Tendencia_Reciente', 1.0)
+            elif var in df_work.columns and len(df_work) > 0:
+                # Usar el último valor disponible
+                exog_data[var] = df_work[var].iloc[-1] if not df_work[var].isna().all() else 0
             else:
-                # Para otras variables, usar el promedio si está disponible en los datos históricos
-                if var in history_df.columns:
-                    exog_data[var] = history_df[var].mean()
+                # MEJORA: Para otras variables, usar valores estimados más inteligentes
+                if var.startswith('Tiros_a_puerta') or var == 'Tiros a puerta':
+                    exog_data[var] = match_data.get('Tiros_a_puerta', 1.5)
+                elif var.startswith('Tiros_totales') or var == 'Tiros totales':
+                    exog_data[var] = match_data.get('Tiros_totales', 2.5)
+                elif var.startswith('Minutos'):
+                    exog_data[var] = match_data.get('Minutos', 90.0)
+                elif var.startswith('Goles_Prom_'):
+                    # Extraer el número de la ventana
+                    try:
+                        ventana = int(var.split('_')[-1])
+                        if len(df_work) >= ventana:
+                            exog_data[var] = df_work['Goles'].tail(ventana).mean()
+                        else:
+                            exog_data[var] = df_work['Goles'].mean() if len(df_work) > 0 else 0.3
+                    except:
+                        exog_data[var] = 0.3  # Valor por defecto para promedios de goles
                 else:
+                    # Para otras variables, usar un valor por defecto
                     exog_data[var] = 0.0
         
+        # MEJORA: Generar versiones normalizadas de todas las variables si se necesitan
         # Normalizar variables si hay información de normalización
         normalizacion = model_data.get('normalizacion', {})
+        
+        # Verificar si se necesitan variables normalizadas
         for var in variables_exogenas:
-            if var in normalizacion and var in exog_data:
-                media = normalizacion[var].get('mean', 0)
-                std = normalizacion[var].get('std', 1)
-                if std > 0:
-                    norm_var = f"{var}_norm"
-                    exog_data[norm_var] = (exog_data[var] - media) / std
+            if var.endswith('_norm'):
+                # Extraer el nombre base
+                base_var = var.replace('_norm', '')
+                
+                # Si tenemos la versión base y la información de normalización
+                if base_var in exog_data:
+                    # Normalizar usando estadísticas guardadas o estimadas
+                    if base_var in normalizacion:
+                        media = normalizacion[base_var].get('mean', 0)
+                        std = normalizacion[base_var].get('std', 1)
+                    else:
+                        # Estimar estadísticas desde el historial
+                        if base_var in df_work.columns:
+                            media = df_work[base_var].mean()
+                            std = df_work[base_var].std()
+                        else:
+                            # Valores por defecto
+                            media = 0
+                            std = 1
+                    
+                    # Calcular valor normalizado
+                    if std > 0:
+                        exog_data[var] = (exog_data[base_var] - media) / std
+                    else:
+                        exog_data[var] = 0
+                else:
+                    # Si no tenemos la versión base, usar un valor por defecto
+                    exog_data[var] = 0
         
         # Convertir a array para el modelo
         if exog_data:
@@ -529,12 +970,20 @@ class PredictionEngine:
             "exog_dict": exog_data,
             "variables_exogenas": variables_exogenas,
             "match_data": match_data,
-            "historical_data": history_df,
+            "historical_data": df_work,
             "disponible": True
         }
     
-    async def _prepare_poisson_features(self, player_name: str, history_df: pd.DataFrame, match_data: dict):
-        """Preparar características para modelo Poisson."""
+    async def _prepare_poisson_features(
+        self, 
+        player_name: str, 
+        history_df: pd.DataFrame, 
+        match_data: dict,
+        prediction_context: List[dict] = None
+    ):
+        """
+        Preparar características para modelo Poisson, considerando el contexto y tendencias.
+        """
         # Cargar modelo para obtener configuración
         model_data = await self.model_loader.load_model("poisson", player_name)
         
@@ -557,58 +1006,145 @@ class PredictionEngine:
                 rename_dict[col] = col.replace(' ', '_')
         if rename_dict:
             df_work = df_work.rename(columns=rename_dict)
+         
+        # MEJORA: Asegurar que las características clave estén disponibles
+        # Si match_data no tiene estas características, estimarlas desde el historial
+        caracteristicas_clave = ['Tiros_a_puerta', 'Tiros_totales', 'Minutos']
         
-        # Preparar variables para la fórmula
-        formula_vars = {}
+        # Añadir caractéristicas clave si no están presentes
+        for caracteristica in caracteristicas_clave:
+            # Verificar tanto con espacios como con guiones bajos
+            caract_con_espacio = caracteristica.replace('_', ' ')
+            caract_con_guion = caracteristica.replace(' ', '_')
+            
+            # Si no está en match_data, intentar estimarla
+            if caracteristica not in match_data and caract_con_espacio not in match_data and caract_con_guion not in match_data:
+                # Buscar en el historial
+                if caracteristica in df_work.columns:
+                    # Calcular promedio de últimos 5 partidos si hay suficientes
+                    if len(df_work) >= 5:
+                        valor_estimado = df_work[caracteristica].tail(5).mean()
+                    else:
+                        valor_estimado = df_work[caracteristica].mean()
+                    
+                    # Si sigue siendo NaN, usar valores típicos por defecto
+                    if pd.isna(valor_estimado):
+                        if caracteristica == 'Tiros_a_puerta':
+                            valor_estimado = 1.5
+                        elif caracteristica == 'Tiros_totales':
+                            valor_estimado = 2.5
+                        elif caracteristica == 'Minutos':
+                            valor_estimado = 90.0
+                        else:
+                            valor_estimado = 0.0
+                            
+                # Si no está en el historial, usar valores por defecto
+                else:
+                    if caracteristica == 'Tiros_a_puerta':
+                        valor_estimado = 1.5
+                    elif caracteristica == 'Tiros_totales':
+                        valor_estimado = 2.5
+                    elif caracteristica == 'Minutos':
+                        valor_estimado = 90.0
+                    else:
+                        valor_estimado = 0.0
+                
+                # Añadir a match_data
+                match_data[caracteristica] = valor_estimado
+                logger.info(f"Característica '{caracteristica}' estimada para {player_name}: {valor_estimado}")
+            
+        # Incorporar predicciones anteriores si hay contexto
+        if prediction_context and len(prediction_context) > 0:
+            # Ordenar contexto por timestamp
+            sorted_context = sorted(prediction_context, key=lambda x: x.get('timestamp', ''))
+            
+            # Crear filas temporales con predicciones previas
+            temp_rows = []
+            for pred_ctx in sorted_context:
+                ctx_match = pred_ctx.get('match_data', {})
+                ctx_pred = pred_ctx.get('prediction', 0)
+                
+                # Crear una nueva fila con la predicción como si fuera un resultado real
+                new_row = {}
+                for key, value in ctx_match.items():
+                    if key in df_work.columns:
+                        new_row[key] = value
+                
+                new_row['Fecha'] = pd.to_datetime(ctx_match.get('Fecha', datetime.now()))
+                new_row['Goles'] = ctx_pred
+                temp_rows.append(new_row)
+            
+            # Si hay filas temporales, añadirlas al DataFrame
+            if temp_rows:
+                # Convertir a DataFrame y asegurar compatibilidad de columnas
+                temp_df = pd.DataFrame(temp_rows)
+                
+                # Añadir solo las columnas que existen en df_work
+                for col in df_work.columns:
+                    if col not in temp_df.columns:
+                        temp_df[col] = None
+                
+                temp_df = temp_df[df_work.columns.intersection(temp_df.columns)]
+                
+                # Concatenar con el historial original y ordenar por fecha
+                df_work = pd.concat([df_work, temp_df]).sort_values('Fecha')
+                logger.info(f"Incorporadas {len(temp_rows)} predicciones previas al historial Poisson de {player_name}")
         
-        # 1. Promedios móviles de goles
+        # Calcular promedios móviles como en entrenamiento
         df_work['Goles_Prom_3'] = df_work['Goles'].rolling(window=3, min_periods=1).mean()
         df_work['Goles_Prom_5'] = df_work['Goles'].rolling(window=5, min_periods=1).mean()
         
+        # Calcular factores de oponente
+        opponent_std = match_data.get('Oponente_Estandarizado', '')
+        df_work, factor_oponente = calcular_factores_oponente(df_work, opponent_std)
+        match_data['Factor_Oponente'] = factor_oponente
+        
+        # Calcular tendencia usando regresión lineal como en el entrenamiento
+        if len(df_work) >= 5:
+            try:
+                # Usar los últimos 5 partidos para la tendencia
+                recent_form = df_work['Goles'].iloc[-5:].values
+                from scipy import stats
+                slope, _, _, _, _ = stats.linregress(range(len(recent_form)), recent_form)
+                match_data['Tendencia'] = slope
+            except:
+                match_data['Tendencia'] = 0
+        else:
+            match_data['Tendencia'] = 0
+        
+        # Preparar variables para la fórmula
+        formula_vars = {}
+        normalizacion = model_data.get('normalization_info', {})
+        
+        # MEJORA: Procesar los términos de la fórmula y asegurar que todos están disponibles
         for feature in formula_terms:
             if feature in match_data:
                 formula_vars[feature] = match_data[feature]
             elif feature.startswith('Goles_Prom_'):
                 # Usar los valores calculados de promedios móviles
                 if feature in df_work.columns and len(df_work) > 0:
-                    formula_vars[feature] = df_work[feature].iloc[-1]
+                    formula_vars[feature] = df_work[feature].iloc[-1] if not df_work[feature].isna().all() else 0.0
                 else:
-                    formula_vars[feature] = 0.0
-            elif feature == 'Factor_Oponente':
-                # Calcular factor basado en historial vs oponente
-                opponent_std = match_data.get('Oponente_Estandarizado', '')
-                hist_vs_opponent = df_work[df_work['Oponente_Estandarizado'] == opponent_std]
-                
-                if len(hist_vs_opponent) > 0:
-                    promedio_vs_oponente = hist_vs_opponent['Goles'].mean()
-                    if df_work['Goles'].mean() > 0:
-                        factor = (promedio_vs_oponente + 1) / (df_work['Goles'].mean() + 1)
-                    else:
-                        factor = 1.0
-                    formula_vars[feature] = factor
-                else:
-                    formula_vars[feature] = 1.0
-            elif feature == 'Tendencia':
-                # Calcular tendencia basada en los últimos partidos
-                if len(df_work) >= 5:
-                    ultima_tendencia = 0
+                    # Si no está disponible, extraer el número de ventana y calcular
                     try:
-                        # Usar los últimos 5 partidos para la tendencia
-                        recent_form = df_work['Goles'].iloc[-5:].values
-                        from scipy import stats
-                        slope, _, _, _, _ = stats.linregress(range(len(recent_form)), recent_form)
-                        ultima_tendencia = slope
+                        ventana = int(feature.split('_')[-1])
+                        if len(df_work) >= ventana:
+                            formula_vars[feature] = df_work['Goles'].tail(ventana).mean()
+                        else:
+                            formula_vars[feature] = df_work['Goles'].mean() if len(df_work) > 0 else 0.3
                     except:
-                        ultima_tendencia = 0
-                    formula_vars[feature] = ultima_tendencia
-                else:
-                    formula_vars[feature] = 0
+                        formula_vars[feature] = 0.3
+            elif feature == 'Factor_Oponente':
+                formula_vars[feature] = match_data.get('Factor_Oponente', 1.0)
+            elif feature == 'Tendencia':
+                formula_vars[feature] = match_data.get('Tendencia', 0)
             elif feature.endswith('_norm'):
-                # Buscar la versión original y normalizarla si está disponible
+                # Buscar la versión original y normalizarla
                 base_feature = feature.replace('_norm', '')
+                
+                # MEJORA: Manejar mejor la normalización
                 if base_feature in match_data:
-                    # Usar información de normalización del modelo
-                    normalizacion = model_data.get('normalization_info', {})
+                    # Aplicar normalización si hay información disponible
                     if base_feature in normalizacion:
                         media = normalizacion[base_feature].get('mean', 0)
                         std = normalizacion[base_feature].get('std', 1)
@@ -617,7 +1153,7 @@ class PredictionEngine:
                         else:
                             formula_vars[feature] = 0
                     else:
-                        # Si no hay información de normalización, usar promedio y std del historial
+                        # Si no hay información, usar promedio y std del historial
                         if base_feature in df_work.columns:
                             media = df_work[base_feature].mean()
                             std = df_work[base_feature].std()
@@ -627,17 +1163,81 @@ class PredictionEngine:
                                 formula_vars[feature] = 0
                         else:
                             formula_vars[feature] = 0
+                elif base_feature in df_work.columns and len(df_work) > 0:
+                    # Si no está en match_data pero sí en historial, usar último valor
+                    base_value = df_work[base_feature].iloc[-1] if not df_work[base_feature].isna().all() else 0
+                    
+                    # Normalizar
+                    if base_feature in normalizacion:
+                        media = normalizacion[base_feature].get('mean', 0)
+                        std = normalizacion[base_feature].get('std', 1)
+                        if std > 0:
+                            formula_vars[feature] = (base_value - media) / std
+                        else:
+                            formula_vars[feature] = 0
+                    else:
+                        # Normalizar con estadísticas del historial
+                        media = df_work[base_feature].mean()
+                        std = df_work[base_feature].std()
+                        if std > 0:
+                            formula_vars[feature] = (base_value - media) / std
+                        else:
+                            formula_vars[feature] = 0
                 else:
-                    formula_vars[feature] = 0
+                    # MEJORA: Manejar casos especiales para características normalizadas
+                    if base_feature == 'Tiros_a_puerta' or base_feature == 'Tiros a puerta':
+                        base_value = match_data.get('Tiros_a_puerta', 1.5)
+                        # Normalizar con valores típicos si no hay información específica
+                        media = normalizacion.get(base_feature, {}).get('mean', 1.2)
+                        std = normalizacion.get(base_feature, {}).get('std', 0.8)
+                        formula_vars[feature] = (base_value - media) / std if std > 0 else 0
+                    elif base_feature == 'Tiros_totales' or base_feature == 'Tiros totales':
+                        base_value = match_data.get('Tiros_totales', 2.5)
+                        media = normalizacion.get(base_feature, {}).get('mean', 2.0)
+                        std = normalizacion.get(base_feature, {}).get('std', 1.2)
+                        formula_vars[feature] = (base_value - media) / std if std > 0 else 0
+                    elif base_feature == 'Minutos':
+                        base_value = match_data.get('Minutos', 90.0)
+                        media = normalizacion.get(base_feature, {}).get('mean', 78.0)
+                        std = normalizacion.get(base_feature, {}).get('std', 20.0)
+                        formula_vars[feature] = (base_value - media) / std if std > 0 else 0
+                    else:
+                        formula_vars[feature] = 0
             else:
-                # Para otras variables, usar un valor por defecto
-                formula_vars[feature] = 0
+                # MEJORA: Para otras variables, buscar en datos históricos y usar valores más inteligentes
+                if feature in df_work.columns and len(df_work) > 0:
+                    formula_vars[feature] = df_work[feature].iloc[-1] if not df_work[feature].isna().all() else 0
+                elif feature == 'Tiros_a_puerta' or feature == 'Tiros a puerta':
+                    formula_vars[feature] = match_data.get('Tiros_a_puerta', 1.5)
+                elif feature == 'Tiros_totales' or feature == 'Tiros totales':
+                    formula_vars[feature] = match_data.get('Tiros_totales', 2.5)
+                elif feature == 'Minutos':
+                    formula_vars[feature] = match_data.get('Minutos', 90.0)
+                elif feature.startswith('Sede_'):
+                    # Manejar variables de sede (local/visitante)
+                    if feature == 'Sede_Local':
+                        formula_vars[feature] = 1 if match_data.get('Es_Local', False) else 0
+                    elif feature == 'Sede_Visitante':
+                        formula_vars[feature] = 0 if match_data.get('Es_Local', False) else 1
+                    else:
+                        formula_vars[feature] = 0
+                else:
+                    # Valor por defecto
+                    formula_vars[feature] = 0
         
         # Agregar oponente específico si está en los términos de la fórmula
-        opponent_std = match_data.get('Oponente_Estandarizado', '')
         oponente_col = f"Oponente_{opponent_std}"
         if oponente_col in formula_terms:
             formula_vars[oponente_col] = 1
+        
+        # MEJORA: Verificar que todos los términos de fórmula tienen un valor asignado
+        missing_features = [term for term in formula_terms if term not in formula_vars]
+        if missing_features:
+            logger.warning(f"Términos de fórmula faltantes para {player_name}: {missing_features}")
+            # Asignar valores por defecto a términos faltantes
+            for term in missing_features:
+                formula_vars[term] = 0
+                logger.info(f"Asignado valor por defecto 0 a término '{term}'")
         
         return {
             "formula_vars": formula_vars,
@@ -791,7 +1391,9 @@ class PredictionEngine:
                 }
             
             # Preparar características específicas para el modelo
-            processed_data = await self.prepare_prediction_features(player_name, match_data, model_type)
+            processed_data = await self.prepare_prediction_features(
+                player_name, match_data, model_type
+            )
             
             # Si hay error en la preparación de datos, devolverlo
             if not processed_data.get("disponible", True) or "error" in processed_data:
@@ -816,13 +1418,23 @@ class PredictionEngine:
             
             # Realizar predicción según el tipo de modelo
             if model_type == "lstm":
-                return self._predict_lstm(model_data, prediction_input)
+                result = self._predict_lstm(model_data, prediction_input)
             elif model_type == "sarimax":
-                return self._predict_sarimax(model_data, prediction_input)
+                result = self._predict_sarimax(model_data, prediction_input)
             elif model_type == "poisson":
-                return self._predict_poisson(model_data, prediction_input)
+                result = self._predict_poisson(model_data, prediction_input)
             else:
                 raise ValueError(f"Tipo de modelo no válido: {model_type}")
+            
+            # Actualizar contexto de predicciones con el resultado
+            if result.get("disponible", False) and "raw_prediction" in result:
+                self.prediction_context.add_prediction(
+                    player_name, 
+                    match_data, 
+                    result["raw_prediction"]
+                )
+                
+            return result
                 
         except Exception as e:
             logger.error(f"Error en predicción con modelo {model_type} para {player_name}: {str(e)}")
@@ -834,7 +1446,11 @@ class PredictionEngine:
             }
     
     def _predict_lstm(self, model_data: dict, processed_data: dict) -> dict:
-        """Predicción con modelo LSTM (maneja incompatibilidad de características)."""
+        """
+        Predicción con modelo LSTM mejorada para coincidir con el entrenamiento.
+        Incluye redondeo probabilístico y tratamiento especial de incompatibilidad de 
+        características.
+        """
         result = {
             "prediction": None,
             "confidence": None,
@@ -878,8 +1494,7 @@ class PredictionEngine:
                 else:
                     X_norm = X
                 
-                # NUEVO: Verificar compatibilidad de forma y realizar ajuste si es necesario
-                # Obtener la forma esperada por el modelo
+                # Verificar compatibilidad de forma y realizar ajuste
                 expected_shape = None
                 if hasattr(modelo, 'input_shape'):
                     expected_shape = modelo.input_shape
@@ -893,58 +1508,65 @@ class PredictionEngine:
                     
                     logger.info(f"Forma actual: (None, {n_steps}, {current_features}), Forma esperada: {expected_shape}")
                     
-                    # Si hay diferencia en el número de características
+                    # Manejar incompatibilidad de forma preservando dimensiones importantes
                     if current_features != expected_features:
                         logger.warning(f"Incompatibilidad de características: modelo espera {expected_features}, datos tienen {current_features}")
                         
                         if current_features < expected_features:
-                            # Rellenar con ceros hasta alcanzar el número esperado de características
+                            # Rellenar con ceros en orden para mantener las características originales en las primeras posiciones
                             padding = np.zeros((n_samples, n_steps, expected_features - current_features))
                             X_norm = np.concatenate([X_norm, padding], axis=2)
                             logger.info(f"Datos ajustados a forma: {X_norm.shape}")
                         else:
-                            # Si tenemos más características de las esperadas, truncar
+                            # Si tenemos más características de las esperadas, usar las primeras (más importantes)
                             logger.warning(f"Truncando características de {current_features} a {expected_features}")
                             X_norm = X_norm[:, :, :expected_features]
                 
-                # Realizar predicción
-                pred_raw = modelo.predict(X_norm, verbose=0)
+                # Realizar múltiples predicciones y promediar para reducir variabilidad
+                n_predicciones = 5
+                predicciones = []
                 
-                # Extraer el valor predicho del resultado (manejar diferentes formatos)
-                pred = None
+                for _ in range(n_predicciones):
+                    pred_raw = modelo.predict(X_norm, verbose=0)
+                    
+                    # Extraer el valor predicho del resultado
+                    pred = None
+                    
+                    # Formato Array/Tensor
+                    if hasattr(pred_raw, 'flatten'):
+                        pred_flatten = pred_raw.flatten()
+                        if len(pred_flatten) > 0:
+                            pred = float(pred_flatten[0])
+                    # Formato Lista/Array
+                    elif isinstance(pred_raw, (list, np.ndarray)):
+                        if len(pred_raw) > 0:
+                            if isinstance(pred_raw[0], (list, np.ndarray)):
+                                if len(pred_raw[0]) > 0:
+                                    pred = float(pred_raw[0][0])
+                            else:
+                                pred = float(pred_raw[0])
+                    # Último recurso
+                    if pred is None:
+                        try:
+                            pred = float(pred_raw)
+                        except:
+                            pred = 0.0
+                    
+                    # Asegurar que la predicción no sea negativa
+                    if pred < 0:
+                        pred = 0
+                        
+                    predicciones.append(pred)
                 
-                # Formato Array/Tensor
-                if hasattr(pred_raw, 'flatten'):
-                    pred_flatten = pred_raw.flatten()
-                    if len(pred_flatten) > 0:
-                        pred = float(pred_flatten[0])
+                # Tomar el promedio para mayor estabilidad
+                pred = np.mean(predicciones)
                 
-                # Formato Lista/Array
-                elif isinstance(pred_raw, (list, np.ndarray)):
-                    if len(pred_raw) > 0:
-                        if isinstance(pred_raw[0], (list, np.ndarray)):
-                            if len(pred_raw[0]) > 0:
-                                pred = float(pred_raw[0][0])
-                        else:
-                            pred = float(pred_raw[0])
-                
-                # Último recurso
-                if pred is None:
-                    try:
-                        pred = float(pred_raw)
-                    except:
-                        pred = 0.0
-                
-                # Asegurar que la predicción no sea negativa
-                if pred < 0:
-                    pred = 0
+                # Aplicar redondeo probabilístico mejorado (igual al entrenamiento)
+                pred_redondeada = redondeo_probabilistico_mejorado([pred])[0]
                 
                 # Calcular valores para la respuesta
-                entero = int(pred)
-                decimal = pred - entero
-                
-                result["prediction"] = entero
-                result["confidence"] = 1 - decimal if decimal <= 0.5 else decimal
+                result["prediction"] = int(pred_redondeada)
+                result["confidence"] = 1.0 - abs(pred - pred_redondeada)
                 result["raw_prediction"] = float(pred)
                 result["disponible"] = True
                 
@@ -955,7 +1577,9 @@ class PredictionEngine:
                     "features_used": processed_data.get('features', []),
                     "original_shape": X.shape,
                     "expected_shape": expected_shape if expected_shape else "unknown",
-                    "padding_applied": current_features != expected_features if expected_shape else False
+                    "padding_applied": current_features != expected_features if expected_shape else False,
+                    "n_predictions": n_predicciones,
+                    "std_predictions": np.std(predicciones)
                 }
                 
                 return result
@@ -964,7 +1588,7 @@ class PredictionEngine:
                 result["error"] = f"Error en predicción LSTM: {str(e)}"
                 return result
         
-        # Si no hay modelo Keras válido, intentar con modelo_entrenado (alternativa)
+        # Si no hay modelo Keras válido, intentar con modelo_entrenado
         if 'modelo_entrenado' in model_data and model_data['modelo_entrenado'] is not None and not isinstance(model_data['modelo_entrenado'], str) and 'X' in processed_data:
             try:
                 modelo = model_data['modelo_entrenado']
@@ -991,11 +1615,11 @@ class PredictionEngine:
                 # Asegurar que la predicción no sea negativa
                 pred = max(0, pred)
                 
-                entero = int(pred)
-                decimal = pred - entero
+                # Usar redondeo probabilístico mejorado
+                pred_redondeada = redondeo_probabilistico_mejorado([pred])[0]
                 
-                result["prediction"] = entero
-                result["confidence"] = 1 - decimal if decimal <= 0.5 else decimal
+                result["prediction"] = int(pred_redondeada)
+                result["confidence"] = 1.0 - abs(pred - pred_redondeada)
                 result["raw_prediction"] = float(pred)
                 result["disponible"] = True
                 
@@ -1016,7 +1640,7 @@ class PredictionEngine:
         return result
     
     def _predict_sarimax(self, model_data: dict, processed_data: dict) -> dict:
-        """Predicción con modelo SARIMAX."""
+        """Predicción con modelo SARIMAX mejorada para mejor manejo de formatos de resultado."""
         result = {
             "prediction": None,
             "confidence": None,
@@ -1079,12 +1703,12 @@ class PredictionEngine:
                 # Asegurar que la predicción no sea negativa
                 pred_val = max(0, pred_val)
                 
-                # Asignar resultados
-                entero = int(pred_val)
-                decimal = pred_val - entero
+                # Aplicar redondeo probabilístico mejorado (mismo que en entrenamiento)
+                pred_redondeada = redondeo_probabilistico_mejorado([pred_val])[0]
                 
-                result["prediction"] = entero
-                result["confidence"] = 1 - decimal if decimal <= 0.5 else decimal
+                # Asignar resultados
+                result["prediction"] = int(pred_redondeada)
+                result["confidence"] = 1.0 - abs(pred_val - pred_redondeada)
                 result["raw_prediction"] = float(pred_val)
                 result["disponible"] = True
                 
@@ -1103,7 +1727,10 @@ class PredictionEngine:
         return result
     
     def _predict_poisson(self, model_data: dict, processed_data: dict) -> dict:
-        """Predicción con modelo Poisson."""
+        """
+        Predicción con modelo Poisson mejorada para incluir distribución de probabilidad
+        completa y mejorar precisión.
+        """
         result = {
             "prediction": None,
             "confidence": None,
@@ -1132,35 +1759,51 @@ class PredictionEngine:
                 # Limitar lambda para evitar valores extremos
                 lambda_pred = min(max(0, lambda_pred), 5)
                 
-                # Calcular distribución de probabilidad
-                probs = [poisson.pmf(i, lambda_pred) for i in range(5)]
-                probs.append(1 - sum(probs))  # Probabilidad para 5+ goles
+                # Realizar múltiples predicciones para estabilidad
+                n_repeticiones = 10
+                predicciones = []
                 
-                # Valor esperado (predicción puntual)
-                pred = lambda_pred
-                entero = int(pred)
-                decimal = pred - entero
+                for _ in range(n_repeticiones):
+                    # Usar distribución de Poisson para generar una muestra
+                    valor_muestra = np.random.poisson(lambda_pred)
+                    predicciones.append(valor_muestra)
+                
+                # Tomar la moda como predicción final
+                valores, conteo = np.unique(predicciones, return_counts=True)
+                pred_final = valores[np.argmax(conteo)]
+                
+                # Calcular distribución de probabilidad
+                probs = [poisson.pmf(i, lambda_pred) for i in range(6)]
+                probs.append(1 - sum(probs))  # Probabilidad para 6+ goles
+                
+                # Calcular confianza como la probabilidad asociada al valor predicho
+                confianza = poisson.pmf(pred_final, lambda_pred) if pred_final < 6 else probs[6]
                 
                 # Asignar resultados
-                result["prediction"] = entero
-                result["confidence"] = 1 - decimal if decimal <= 0.5 else decimal
-                result["raw_prediction"] = float(pred)
+                result["prediction"] = int(pred_final)
+                result["confidence"] = float(confianza)
+                result["raw_prediction"] = float(lambda_pred)
                 result["disponible"] = True
                 
-                # Distribución de probabilidad
+                # Distribución de probabilidad completa
                 result["probability_distribution"] = {
                     "0": float(probs[0]),
                     "1": float(probs[1]),
                     "2": float(probs[2]),
                     "3": float(probs[3]),
                     "4": float(probs[4]),
-                    "5+": float(probs[5])
+                    "5": float(probs[5]),
+                    "6+": float(probs[6])
                 }
                 
                 # Añadir metadatos
                 result["metadata"] = {
                     "model_type": "Poisson",
-                    "formula": model_data.get('modelo_config', {}).get('formula', '')
+                    "formula": model_data.get('modelo_config', {}).get('formula', ''),
+                    "lambda": float(lambda_pred),
+                    "num_repeticiones": n_repeticiones,
+                    "predicciones": predicciones,
+                    "moda": int(pred_final)
                 }
             except Exception as e:
                 logger.error(f"Error en predicción Poisson: {str(e)}")
@@ -1172,7 +1815,8 @@ class PredictionEngine:
     
     def calculate_prediction_ensemble(self, predictions: Dict[str, dict], weights: Dict[str, float] = None) -> dict:
         """
-        Calcular predicción ensemble a partir de predicciones individuales.
+        Calcular predicción ensemble a partir de predicciones individuales con ponderación
+        dinámica basada en confianza.
         
         Args:
             predictions: Diccionario con predicciones de cada modelo
@@ -1200,39 +1844,54 @@ class PredictionEngine:
                 "disponible": False
             }
         
-        # Ajustar pesos para usar solo modelos disponibles
-        adjusted_weights = {}
-        for model in available_predictions:
-            if model in weights:
-                adjusted_weights[model] = weights[model]
+        # MEJORA: Ajustar pesos dinámicamente basado en la confianza del modelo
+        dynamic_weights = {}
         
-        # Normalizar pesos
-        total_weight = sum(adjusted_weights.values())
+        for model, pred in available_predictions.items():
+            # Peso base del modelo
+            base_weight = weights.get(model, 1.0)
+            
+            # Factor de confianza (si existe)
+            confidence = pred.get("confidence", 0.5)
+            
+            # Ajustar peso por confianza
+            adjusted_weight = base_weight * (0.5 + confidence)
+            
+            dynamic_weights[model] = adjusted_weight
+        
+        # Normalizar pesos dinámicos
+        total_weight = sum(dynamic_weights.values())
         if total_weight > 0:
-            adjusted_weights = {k: v/total_weight for k, v in adjusted_weights.items()}
+            dynamic_weights = {k: v/total_weight for k, v in dynamic_weights.items()}
         else:
             # Si no hay pesos válidos, usar pesos iguales
-            adjusted_weights = {k: 1.0/len(available_predictions) for k in available_predictions}
+            dynamic_weights = {k: 1.0/len(available_predictions) for k in available_predictions}
         
         # Calcular predicción ponderada
         weighted_sum = 0
         for model, pred in available_predictions.items():
             raw_pred = pred["raw_prediction"]
-            weight = adjusted_weights.get(model, 0)
+            weight = dynamic_weights.get(model, 0)
             weighted_sum += raw_pred * weight
         
         # Asegurar que la predicción no sea negativa
         ensemble_pred = max(0, weighted_sum)
         
-        # Determinar valor entero y confianza
-        entero = int(ensemble_pred)
-        decimal = ensemble_pred - entero
-        confidence = 1 - decimal if decimal <= 0.5 else decimal
+        # Usar redondeo probabilístico mejorado para la predicción final
+        ensemble_pred_rounded = redondeo_probabilistico_mejorado([ensemble_pred])[0]
+        
+        # Calcular confianza como promedio ponderado de confianzas individuales
+        weighted_confidence = 0
+        for model, pred in available_predictions.items():
+            confidence = pred.get("confidence", 0.5)
+            weight = dynamic_weights.get(model, 0)
+            weighted_confidence += confidence * weight
         
         return {
-            "prediction": entero,
-            "confidence": confidence,
+            "prediction": int(ensemble_pred_rounded),
+            "confidence": float(weighted_confidence),
             "raw_prediction": float(ensemble_pred),
+            "dynamic_weights": dynamic_weights,
             "disponible": True
         }
     
@@ -1339,30 +1998,24 @@ class PredictionEngine:
                 }
             }
         
-        # Ajustar pesos para usar solo modelos disponibles
-        adjusted_weights = {}
-        for model in available_models:
-            if model in weights:
-                adjusted_weights[model] = weights[model]
-        
-        # Normalizar pesos
-        total_weight = sum(adjusted_weights.values())
-        if total_weight > 0:
-            adjusted_weights = {k: v/total_weight for k, v in adjusted_weights.items()}
-        else:
-            # Si no hay pesos válidos, usar pesos iguales
-            adjusted_weights = {k: 1.0/len(available_models) for k in available_models}
-        
         # Calcular predicción ensemble con los modelos disponibles
         ensemble_result = self.calculate_prediction_ensemble(
             {k: v for k, v in model_predictions.items() if k in available_models},
-            adjusted_weights
+            weights
         )
         
         # Extraer probabilidad del modelo Poisson si está disponible
         probability_distribution = {}
         if "poisson" in model_predictions and model_predictions["poisson"].get("disponible", False):
             probability_distribution = model_predictions["poisson"].get("probability_distribution", {})
+        
+        # Guardar resultado en el contexto de predicción
+        if ensemble_result.get("disponible", False):
+            self.prediction_context.add_prediction(
+                player_name, 
+                match_data, 
+                ensemble_result["raw_prediction"]
+            )
         
         # Construir resultado
         result = {
@@ -1396,9 +2049,10 @@ class PredictionEngine:
             },
             "metadata": {
                 "weights": weights,
-                "adjusted_weights": adjusted_weights,
+                "dynamic_weights": ensemble_result.get("dynamic_weights", {}),
                 "timestamp": datetime.now().isoformat(),
-                "models_used": available_models
+                "models_used": available_models,
+                "context_size": len(self.prediction_context.get_context(player_name))
             }
         }
         

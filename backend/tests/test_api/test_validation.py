@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 from datetime import date
 
-from backend.app.api.validation import (
+from app.api.validation import (
     PlayerPredictionRequest,
     MatchPredictionRequest,
     ModelSelectionRequest,

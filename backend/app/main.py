@@ -7,9 +7,9 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 import uvicorn
 
-from backend.app.api.endpoints import router as api_router
+from app.api.endpoints import router as api_router
 
-from backend.app.config import (
+from app.config import (
     API_TITLE, 
     API_DESCRIPTION, 
     API_VERSION, 
