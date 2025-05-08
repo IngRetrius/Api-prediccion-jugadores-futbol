@@ -1,0 +1,101 @@
+Fecha_Numero,Jugador,Oponente,Prediccion_Decimal,Prediccion_Entero,Historico_Tiros_Totales,Historico_Tiros_Puerta,Promedio_Goles_vs_Oponente,Confianza_Modelo
+1,Carlos_Bacca,Deportivo Cali,0.16,0,1.77,0.84,0.83,0.953
+1,Dayro_Moreno,Atlético Nacional,0.67,1,2.97,1.27,0.56,0.951
+1,Hugo_Rodallega,Pereira,0.35,0,3.44,1.16,0.6,0.861
+1,Leonardo_Castro,Unión Magdalena,0.5,0,2.89,1.13,0.33,0.95
+1,Marco_Perez,Deportivo Cali,0.15,0,2.36,0.98,0.43,0.9740000000000001
+2,Carlos_Bacca,Rionegro,0.16,0,1.77,0.84,0.75,0.953
+2,Dayro_Moreno,Fortaleza CEIF,0.93,1,2.97,1.27,0.33,0.951
+2,Hugo_Rodallega,Deportes Tolima,0.29,0,3.44,1.16,0.43,0.861
+2,Leonardo_Castro,Deportivo Pasto,0.25,0,2.89,1.13,0.62,0.95
+2,Marco_Perez,Rionegro,0.18,0,2.36,0.98,0.0,0.9740000000000001
+3,Carlos_Bacca,Unión Magdalena,0.27,0,1.77,0.84,0.25,0.953
+3,Dayro_Moreno,Bucaramanga,1.0,1,2.97,1.27,0.6,0.951
+3,Hugo_Rodallega,Rionegro,0.16,0,3.44,1.16,0.0,0.861
+3,Leonardo_Castro,La Equidad,0.15,0,2.89,1.13,1.0,0.95
+3,Marco_Perez,Unión Magdalena,0.06,0,2.36,0.98,1.67,0.9740000000000001
+4,Carlos_Bacca,Once Caldas,0.25,0,1.77,0.84,0.12,0.953
+4,Dayro_Moreno,Junior,0.64,1,2.97,1.27,0.36,0.951
+4,Hugo_Rodallega,Atlético Nacional,0.22,0,3.44,1.16,0.17,0.861
+4,Leonardo_Castro,Llaneros,1.06,1,2.89,1.13,0.0,0.95
+4,Marco_Perez,Once Caldas,0.17,0,2.36,0.98,0.17,0.9740000000000001
+5,Carlos_Bacca,Boyacá Chicó,0.27,0,1.77,0.84,0.25,0.953
+5,Dayro_Moreno,Pereira,1.05,1,2.97,1.27,0.8,0.951
+5,Hugo_Rodallega,CD América,0.16,0,3.44,1.16,0.0,0.861
+5,Leonardo_Castro,Independiente Medellín,0.82,1,2.89,1.13,0.25,0.95
+5,Marco_Perez,Boyacá Chicó,0.12,0,2.36,0.98,0.5,0.9740000000000001
+6,Carlos_Bacca,Envigado,0.17,0,1.77,0.84,0.67,0.953
+6,Dayro_Moreno,Rionegro,0.64,1,2.97,1.27,0.33,0.951
+6,Hugo_Rodallega,Bucaramanga,0.21,0,3.44,1.16,0.14,0.861
+6,Leonardo_Castro,Deportivo Cali,0.5,0,2.89,1.13,0.33,0.95
+6,Marco_Perez,Envigado,0.14,0,2.36,0.98,0.44,0.9740000000000001
+7,Carlos_Bacca,Bucaramanga,0.27,0,1.77,0.84,0.29,0.953
+7,Dayro_Moreno,Alianza FC,0.99,1,2.97,1.27,0.57,0.951
+7,Hugo_Rodallega,Envigado,1.32,1,3.44,1.16,2.0,0.861
+7,Leonardo_Castro,Deportes Tolima,0.75,1,2.89,1.13,0.29,0.95
+7,Marco_Perez,Bucaramanga,0.13,0,2.36,0.98,0.4,0.9740000000000001
+8,Carlos_Bacca,Millonarios,0.21,0,1.77,0.84,0.38,0.953
+8,Dayro_Moreno,Deportes Tolima,0.64,1,2.97,1.27,0.36,0.951
+8,Hugo_Rodallega,Fortaleza CEIF,0.26,0,3.44,1.16,0.33,0.861
+8,Leonardo_Castro,Junior,0.14,0,2.89,1.13,0.89,0.95
+8,Marco_Perez,Millonarios,0.16,0,2.36,0.98,0.29,0.9740000000000001
+9,Carlos_Bacca,Llaneros,0.32,0,1.77,0.84,0.0,0.953
+9,Dayro_Moreno,Independiente Santa Fe,0.95,1,2.97,1.27,0.44,0.951
+9,Hugo_Rodallega,Once Caldas,0.25,0,3.44,1.16,0.43,0.861
+9,Leonardo_Castro,Rionegro,0.82,1,2.89,1.13,0.25,0.95
+9,Marco_Perez,Llaneros,0.13,0,2.36,0.98,0.37,0.9740000000000001
+10,Carlos_Bacca,Unión Magdalena,0.23,0,1.77,0.84,0.25,0.953
+10,Dayro_Moreno,Pereira,0.72,1,2.97,1.27,0.8,0.951
+10,Hugo_Rodallega,Millonarios,0.29,0,3.44,1.16,0.44,0.861
+10,Leonardo_Castro,Independiente Santa Fe,0.2,0,2.89,1.13,0.73,0.95
+10,Marco_Perez,Unión Magdalena,0.07,0,2.36,0.98,1.67,0.9740000000000001
+11,Carlos_Bacca,La Equidad,0.32,0,1.77,0.84,0.0,0.953
+11,Dayro_Moreno,Envigado,0.66,1,2.97,1.27,0.5,0.951
+11,Hugo_Rodallega,Unión Magdalena,0.27,0,3.44,1.16,0.5,0.861
+11,Leonardo_Castro,Alianza FC,0.46,0,2.89,1.13,0.5,0.95
+11,Marco_Perez,La Equidad,0.15,0,2.36,0.98,0.17,0.9740000000000001
+12,Carlos_Bacca,Independiente Medellín,0.18,0,1.77,0.84,0.62,0.953
+12,Dayro_Moreno,América,0.96,1,2.97,1.27,0.48,0.951
+12,Hugo_Rodallega,Deportivo Pasto,0.31,0,3.44,1.16,0.5,0.861
+12,Leonardo_Castro,Fortaleza CEIF,0.36,0,2.89,1.13,0.48,0.95
+12,Marco_Perez,Independiente Medellín,0.17,0,2.36,0.98,0.17,0.9740000000000001
+13,Carlos_Bacca,Deportivo Pasto,0.26,0,1.77,0.84,0.33,0.953
+13,Dayro_Moreno,Boyacá Chicó,0.71,1,2.97,1.27,0.75,0.951
+13,Hugo_Rodallega,La Equidad,0.25,0,3.44,1.16,0.43,0.861
+13,Leonardo_Castro,Atletico Nacional,0.49,0,2.89,1.13,0.48,0.95
+13,Marco_Perez,Deportivo Pasto,0.12,0,2.36,0.98,0.5,0.9740000000000001
+14,Carlos_Bacca,Deportes Tolima,0.24,0,1.77,0.84,0.4,0.953
+14,Dayro_Moreno,La Equidad,0.91,1,2.97,1.27,0.25,0.951
+14,Hugo_Rodallega,Independiente Medellín,0.18,0,3.44,1.16,0.0,0.861
+14,Leonardo_Castro,CD América,0.21,0,2.89,1.13,0.71,0.95
+14,Marco_Perez,Deportes Tolima,0.16,0,2.36,0.98,0.0,0.9740000000000001
+15,Carlos_Bacca,Alianza FC,0.16,0,1.77,0.84,0.75,0.953
+15,Dayro_Moreno,Independiente Medellín,0.76,1,2.97,1.27,1.0,0.951
+15,Hugo_Rodallega,Llaneros,0.23,0,3.44,1.16,0.35,0.861
+15,Leonardo_Castro,Pereira,0.15,0,2.89,1.13,1.0,0.95
+15,Marco_Perez,Alianza FC,0.13,0,2.36,0.98,0.6,0.9740000000000001
+16,Carlos_Bacca,Pereira,0.22,0,1.77,0.84,0.56,0.953
+16,Dayro_Moreno,Llaneros,0.85,1,2.97,1.27,0.0,0.951
+16,Hugo_Rodallega,Boyacá Chicó,0.26,0,3.44,1.16,0.33,0.861
+16,Leonardo_Castro,Bucaramanga,0.43,0,2.89,1.13,0.4,0.95
+16,Marco_Perez,Pereira,0.14,0,2.36,0.98,0.29,0.9740000000000001
+17,Carlos_Bacca,CD América,0.23,0,1.77,0.84,0.29,0.953
+17,Dayro_Moreno,Unión Magdalena,0.66,1,2.97,1.27,0.5,0.951
+17,Hugo_Rodallega,Millonarios,0.26,0,3.44,1.16,0.44,0.861
+17,Leonardo_Castro,Independiente Santa Fe,0.27,0,2.89,1.13,0.73,0.95
+17,Marco_Perez,CD América,0.14,0,2.36,0.98,0.44,0.9740000000000001
+18,Carlos_Bacca,Independiente Santa Fe,0.27,0,1.77,0.84,0.29,0.953
+18,Dayro_Moreno,Millonarios,0.94,1,2.97,1.27,0.38,0.951
+18,Hugo_Rodallega,Junior,0.18,0,3.44,1.16,0.0,0.861
+18,Leonardo_Castro,Once Caldas,1.06,1,2.89,1.13,0.0,0.95
+18,Marco_Perez,Independiente Santa Fe,0.08,0,2.36,0.98,1.4,0.9740000000000001
+19,Carlos_Bacca,Fortaleza CEIF,0.14,0,1.77,0.84,1.0,0.953
+19,Dayro_Moreno,Deportivo Pasto,0.61,1,2.97,1.27,0.17,0.951
+19,Hugo_Rodallega,Deportivo Cali,0.65,1,3.44,1.16,1.33,0.861
+19,Leonardo_Castro,Envigado,1.45,1,2.89,1.13,0.0,0.95
+19,Marco_Perez,Fortaleza CEIF,0.18,0,2.36,0.98,0.0,0.9740000000000001
+20,Carlos_Bacca,Atlético Nacional,0.27,0,1.77,0.84,0.25,0.953
+20,Dayro_Moreno,Deportivo Cali,0.97,1,2.97,1.27,0.5,0.951
+20,Hugo_Rodallega,Alianza FC,0.23,0,3.44,1.16,0.33,0.861
+20,Leonardo_Castro,Boyacá Chicó,0.46,0,2.89,1.13,0.5,0.95
+20,Marco_Perez,Atlético Nacional,0.16,0,2.36,0.98,0.0,0.9740000000000001

@@ -7,6 +7,7 @@ import PredictionPage from './pages/PredictionPage';
 import PlayerAnalysisPage from './pages/PlayerAnalysisPage';
 import ComparisonPage from './pages/ComparisonPage';
 import AboutPage from './pages/AboutPage';
+import ValidationPage from './pages/ValidationPage';
 import PlayerList from './components/players/PlayerList';
 import TeamPage from './pages/TeamPage';
 
@@ -22,6 +23,7 @@ const AppRoutes: React.FC = () => {
       } />
       <Route path="/players/:playerName" element={<PlayerAnalysisPage />} />
       <Route path="/compare" element={<ComparisonPage />} />
+      <Route path="/validation" element={<ValidationPage />} />
       <Route path="/about" element={<AboutPage />} />
       <Route path="/teams" element={<TeamPage />} />
       {/* Redirección para rutas no encontradas */}
