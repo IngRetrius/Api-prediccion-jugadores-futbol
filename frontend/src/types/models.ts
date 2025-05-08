@@ -125,3 +125,44 @@ export interface Player {
     tournaments: string[];
     total_records: number;
   }
+
+  // Interfaz para las predicciones
+  export interface PredictionValidation {
+    Fecha_Numero: number;
+    Jugador: string;
+    Oponente: string;
+    Prediccion_Decimal: number;
+    Prediccion_Entero: number;
+    Historico_Tiros_Totales: number;
+    Historico_Tiros_Puerta: number;
+    Promedio_Goles_vs_Oponente: number;
+    Confianza_Modelo: number;
+    ModelType: string; // Qué modelo hizo esta predicción (lstm, sarimax, poisson)
+  }
+
+  // Interfaz para los resultados reales
+  export interface ActualResult {
+    Jugador: string;
+    Equipo: string;
+    Fecha_Numero: number;
+    Fecha: string;
+    Oponente: string;
+    Goles: number;
+    Tiros_Totales: number;
+    Tiros_Puerta: number;
+  }
+
+  // Interfaz combinada para comparación
+  export interface ValidationComparison {
+    prediction: PredictionValidation;
+    actual: ActualResult | null; // null si el jugador no jugó
+    didPlay: boolean;
+    isAccurate: boolean; // true si la predicción coincide con el resultado real
+    difference: number; // diferencia entre la predicción y el resultado real
+  }
+
+  // Interfaz para la respuesta de la API
+  export interface ValidationDataResponse {
+    predictions: PredictionValidation[];
+    actual_results: ActualResult[];
+  }

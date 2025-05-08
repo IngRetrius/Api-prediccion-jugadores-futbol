@@ -33,10 +33,14 @@ const Header: React.FC = () => {
               <Link to="/teams" className="text-white hover:bg-blue-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
                 Equipos
               </Link>
+              <Link to="/validation" className="text-white hover:bg-blue-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
+                Validación
+              </Link>
               <Link to="/about" className="text-white hover:bg-blue-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
                 Acerca de
               </Link>
             </nav>
+
           </div>
 
           {/* Mobile menu button */}
@@ -102,6 +106,13 @@ const Header: React.FC = () => {
             onClick={() => setIsMenuOpen(false)}
           >
             Equipos
+          </Link>
+          <Link 
+            to="/validation" 
+            className="text-white hover:bg-blue-700 block pl-3 pr-4 py-2 text-base font-medium"
+            onClick={() => setIsMenuOpen(false)}
+          >
+            Validación
           </Link>
           <Link 
             to="/about" 

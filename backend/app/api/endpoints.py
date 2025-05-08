@@ -517,3 +517,99 @@ async def get_system_status():
             "timestamp": datetime.now().isoformat()
         }
     
+# -------------------ENDPOINT PARA SERVIR DATOS DE VALIDACIÓN DE PREDICCIONES---------------------------
+
+@router.get("/validation-data", tags=["Análisis"])
+async def get_validation_data():
+    """
+    Obtener datos de validación de predicciones vs. resultados reales.
+    """
+    try:
+        # Importar directorios
+        from app.config import DATA_DIR
+        import pandas as pd
+        import numpy as np
+        import os
+        
+        # Definir rutas a los archivos CSV
+        model_files = {
+            "lstm": os.path.join(DATA_DIR, "predicciones_torneo2025_lstm.csv"),
+            "sarimax": os.path.join(DATA_DIR, "predicciones_torneo2025_sarimax.csv"),
+            "poisson": os.path.join(DATA_DIR, "predicciones_torneo2025_poisson.csv")
+        }
+        
+        actual_results_file = os.path.join(DATA_DIR, "stats_jugadores2025.csv")
+        
+        # Comprobar si los archivos existen
+        for model, filepath in model_files.items():
+            if not os.path.exists(filepath):
+                logger.warning(f"Archivo de predicciones {model} no encontrado: {filepath}")
+                # Usar datos de ejemplo para el modelo si no está disponible
+                model_files[model] = os.path.join(DATA_DIR, "predicciones_torneo2025_sarimax.csv")
+        
+        if not os.path.exists(actual_results_file):
+            logger.warning(f"Archivo de resultados reales no encontrado: {actual_results_file}")
+            return {
+                "predictions": [],
+                "actual_results": []
+            }
+        
+        # Cargar datos de predicción de cada modelo
+        predictions = []
+        for model, filepath in model_files.items():
+            try:
+                df = pd.read_csv(filepath)
+                df["ModelType"] = model  # Añadir columna para identificar el modelo
+                predictions.append(df)
+            except Exception as e:
+                logger.error(f"Error al cargar predicciones {model}: {str(e)}")
+        
+        # Combinar predicciones de todos los modelos
+        if predictions:
+            predictions_df = pd.concat(predictions, ignore_index=True)
+        else:
+            return {
+                "predictions": [],
+                "actual_results": []
+            }
+        
+        # Cargar resultados reales
+        try:
+            actual_results_df = pd.read_csv(actual_results_file, sep=";")  # Notar el separador
+            
+            # Limpiar y procesar resultados reales
+            # Dividir la columna única en múltiples columnas si es necesario
+            if len(actual_results_df.columns) == 1:
+                columns = ["Jugador", "Equipo", "Fecha_Numero", "Fecha", "Oponente", "Goles", "Tiros_Totales", "Tiros_Puerta"]
+                actual_results_df = actual_results_df[actual_results_df.columns[0]].str.split(";", expand=True)
+                actual_results_df.columns = columns
+            
+            # Convertir columnas numéricas
+            numeric_columns = ["Fecha_Numero", "Goles", "Tiros_Totales", "Tiros_Puerta"]
+            for col in numeric_columns:
+                if col in actual_results_df.columns:
+                    actual_results_df[col] = pd.to_numeric(actual_results_df[col], errors="coerce")
+            
+        except Exception as e:
+            logger.error(f"Error al cargar resultados reales: {str(e)}")
+            actual_results_df = pd.DataFrame(columns=["Jugador", "Equipo", "Fecha_Numero", "Fecha", "Oponente", "Goles", "Tiros_Totales", "Tiros_Puerta"])
+        
+        # Limpiar valores problemáticos (NaN, Infinity) antes de convertir a JSON
+        predictions_df = predictions_df.replace([np.nan, np.inf, -np.inf], None)
+        actual_results_df = actual_results_df.replace([np.nan, np.inf, -np.inf], None)
+        
+        # Convertir dataframes a diccionarios para respuesta JSON
+        predictions_list = predictions_df.to_dict(orient="records")
+        actual_results_list = actual_results_df.to_dict(orient="records")
+        
+        return {
+            "predictions": predictions_list,
+            "actual_results": actual_results_list
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en validation-data: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al procesar datos de validación: {str(e)}"
+        )
