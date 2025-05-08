@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ScatterChart, Scatter, ZAxis
+  ScatterChart, Scatter, ZAxis, Cell, ReferenceLine
 } from 'recharts';
 import Card from '../common/Card';
-// import Button from '../common/Button';
 import { ValidationComparison } from '../../types/models';
 import { formatPlayerName } from '../../utils/formatters';
 
@@ -55,48 +54,75 @@ const ValidationChart: React.FC<ValidationChartProps> = ({ data }) => {
   
   // Preparar datos para la comparación de predicciones vs. resultados reales
   const comparisonData = React.useMemo(() => {
-    // Agrupar por jugador y modelo
-    const grouped = data.filter(item => item.didPlay).reduce((acc, item) => {
-      const player = item.prediction.Jugador;
-      const model = item.prediction.ModelType;
-      const key = `${player}-${model}`;
+    // Primero agrupamos por jugador para obtener los goles reales (que son los mismos independientemente del modelo)
+    const playerRealGoals: Record<string, { player: string, actualGoals: number, count: number }> = {};
+    
+    data.filter(item => item.didPlay).forEach(item => {
+      const playerName = formatPlayerName(item.prediction.Jugador);
       
-      if (!acc[key]) {
-        acc[key] = {
-          player: formatPlayerName(player),
-          model,
-          predictedGoals: 0,
+      if (!playerRealGoals[playerName]) {
+        playerRealGoals[playerName] = {
+          player: playerName,
           actualGoals: 0,
-          matches: 0
+          count: 0
         };
       }
       
-      acc[key].predictedGoals += item.prediction.Prediccion_Decimal;
-      acc[key].actualGoals += item.actual?.Goles || 0;
-      acc[key].matches += 1;
-      
-      return acc;
-    }, {} as Record<string, { 
-      player: string, 
-      model: string, 
-      predictedGoals: number, 
-      actualGoals: number,
-      matches: number 
-    }>);
+      playerRealGoals[playerName].actualGoals += item.actual?.Goles || 0;
+      playerRealGoals[playerName].count += 1;
+    });
     
-    // Convertir a array y calcular promedios
-    return Object.values(grouped).map(group => ({
-      ...group,
-      predictedGoals: group.predictedGoals / group.matches,
-      actualGoals: group.actualGoals / group.matches
-    })).sort((a, b) => a.player.localeCompare(b.player));
+    // Calcular el promedio de goles reales por jugador
+    Object.values(playerRealGoals).forEach(player => {
+      player.actualGoals = player.actualGoals / player.count;
+    });
+    
+    // Ahora agrupamos por jugador y modelo para las predicciones
+    const result: any[] = [];
+    
+    // Crear un objeto para cada jugador único
+    const uniquePlayers = [...new Set(data.filter(item => item.didPlay).map(item => formatPlayerName(item.prediction.Jugador)))];
+    
+    uniquePlayers.forEach(playerName => {
+      const playerData: any = {
+        player: playerName,
+        actualGoals: playerRealGoals[playerName]?.actualGoals || 0
+      };
+      
+      // Agrupar predicciones por modelo para este jugador
+      const modelPredictions: Record<string, { total: number, count: number }> = {};
+      
+      data.filter(item => item.didPlay && formatPlayerName(item.prediction.Jugador) === playerName)
+        .forEach(item => {
+          const model = item.prediction.ModelType;
+          
+          if (!modelPredictions[model]) {
+            modelPredictions[model] = {
+              total: 0,
+              count: 0
+            };
+          }
+          
+          modelPredictions[model].total += item.prediction.Prediccion_Decimal;
+          modelPredictions[model].count += 1;
+        });
+      
+      // Calcular promedio para cada modelo
+      Object.entries(modelPredictions).forEach(([model, data]) => {
+        playerData[`${model}_predicted`] = data.total / data.count;
+      });
+      
+      result.push(playerData);
+    });
+    
+    return result;
   }, [data]);
   
   // Colores para los modelos
   const modelColors: Record<string, string> = {
-    lstm: '#8884d8',
-    sarimax: '#82ca9d',
-    poisson: '#ffc658'
+    lstm: '#4F46E5',     // Azul/Indigo
+    sarimax: '#059669',  // Verde
+    poisson: '#B45309'   // Ámbar/Naranja
   };
   
   return (
@@ -172,14 +198,58 @@ const ValidationChart: React.FC<ValidationChartProps> = ({ data }) => {
             <BarChart
               data={comparisonData}
               margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              barSize={20}  // Controlar el ancho de las barras
+              barGap={2}    // Espacio entre barras del mismo grupo
             >
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="player" />
+              <XAxis 
+                dataKey="player" 
+                axisLine={true}
+                tick={{ fontSize: 12 }}
+              />
               <YAxis />
-              <Tooltip />
+              <Tooltip 
+                formatter={(value: any, name: string) => {
+                  if (name === 'actualGoals') {
+                    return [`${value.toFixed(2)}`, 'Goles Reales (Promedio)'];
+                  } else if (name.includes('_predicted')) {
+                    const model = name.split('_')[0].toUpperCase();
+                    return [`${value.toFixed(2)}`, `Goles Predichos (${model})`];
+                  }
+                  return [value, name];
+                }}
+              />
               <Legend />
-              <Bar dataKey="predictedGoals" fill="#3B82F6" name="Goles Predichos (Promedio)" />
-              <Bar dataKey="actualGoals" fill="#EF4444" name="Goles Reales (Promedio)" />
+              
+              {/* Una sola barra para goles reales */}
+              <Bar 
+                dataKey="actualGoals" 
+                name="Goles Reales (Promedio)" 
+                fill="#EF4444" 
+                radius={[4, 4, 0, 0]}
+              />
+              
+              {/* Barras para predicciones por modelo */}
+              <Bar 
+                dataKey="lstm_predicted" 
+                name="Goles Predichos (LSTM)" 
+                fill={modelColors.lstm}
+                radius={[4, 4, 0, 0]}
+              />
+              
+              <Bar 
+                dataKey="sarimax_predicted" 
+                name="Goles Predichos (SARIMAX)" 
+                fill={modelColors.sarimax}
+                radius={[4, 4, 0, 0]}
+              />
+              
+              <Bar 
+                dataKey="poisson_predicted" 
+                name="Goles Predichos (POISSON)" 
+                fill={modelColors.poisson}
+                radius={[4, 4, 0, 0]}
+              />
             </BarChart>
           )}
         </ResponsiveContainer>

@@ -3,10 +3,6 @@ venv/
 .env/
 .venv/
 
-# Archivos de modelos
-*.pkl
-*.h5
-
 # Cachés de Python
 __pycache__/
 *.py[cod]
@@ -28,7 +24,6 @@ Thumbs.db
 # Otros archivos que pueden ser generados
 *.sqlite3
 *.db
-*.csv
 
 
 # Node.js / React
