@@ -7,6 +7,8 @@ import Loading from '../components/common/Loading';
 import { getSystemStatus } from '../api/predictionsApi';
 import { SystemStatus } from '../types/api';
 import { getAvailablePlayers } from '../api/playersApi';
+import DepCaliLogo from '../assets/DepCaliEscudo.png';
+import OnceCaldasLogo from '../assets/OnceCaldasEscudo.png';
 import { formatPlayerName } from '../utils/formatters';
 import { 
   BarChart, 
@@ -43,7 +45,7 @@ const HomePage: React.FC = () => {
   const [filteredPlayers, setFilteredPlayers] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
   const navigate = useNavigate();
-  
+    
   // Estadísticas actualizadas con datos de validación
   const quickStats: QuickStat[] = [
     { label: 'Predicciones Totales', value: '300', change: '', color: 'blue' },
@@ -279,12 +281,12 @@ const HomePage: React.FC = () => {
             <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
               <div className="flex items-center space-x-6">
                 <div className="text-center">
-                  <img src="/api/placeholder/60/60" alt="Once Caldas" className="w-16 h-16 rounded-full mb-2" />
+                  <img src={OnceCaldasLogo} alt="Once Caldas" className="w-16 h-16 rounded-full mb-2" />
                   <p className="font-semibold text-gray-900">Once Caldas</p>
                 </div>
                 <div className="text-2xl font-bold text-gray-600">vs</div>
                 <div className="text-center">
-                  <img src="/api/placeholder/60/60" alt="Deportivo Cali" className="w-16 h-16 rounded-full mb-2" />
+                  <img src={DepCaliLogo} alt="Deportivo Cali" className="w-16 h-16 rounded-full mb-2" />
                   <p className="font-semibold text-gray-900">Deportivo Cali</p>
                 </div>
               </div>
