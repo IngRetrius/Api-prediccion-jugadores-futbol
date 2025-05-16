@@ -471,7 +471,7 @@ async def get_system_status():
         model_availability = {"sarimax": 0, "poisson": 0, "lstm": 0}
         
         if players_count > 0:
-            test_players = AVAILABLE_PLAYERS[:min(3, players_count)]
+            test_players = AVAILABLE_PLAYERS
             available_models_by_player = {}
             
             for test_player in test_players:

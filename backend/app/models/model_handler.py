@@ -322,7 +322,7 @@ class ModelLoader:
             h5_file_name = f"lstm_{player_name}.h5"
         elif model_type == "sarimax":
             model_dir = SARIMAX_MODELS_DIR
-            file_name = f"arima_{player_name}.pkl"
+            file_name = f"sarimax_{player_name}.pkl"
         elif model_type == "poisson":
             model_dir = POISSON_MODELS_DIR
             file_name = f"poisson_{player_name}.pkl"

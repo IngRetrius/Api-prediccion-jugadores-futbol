@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
 import PlayerHistory from '../components/players/PlayerHistory';
@@ -9,11 +9,20 @@ import Button from '../components/common/Button';
 import Loading from '../components/common/Loading';
 import { usePlayerData } from '../hooks/usePlayerData';
 import { formatPlayerName } from '../utils/formatters';
+import DayroVideo from '../assets/dayro_moreno.mp4';
 
 const PlayerAnalysisPage: React.FC = () => {
   const { playerName } = useParams<{ playerName: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'history' | 'stats' | 'metrics'>('history');
+  const [showVideo, setShowVideo] = useState<boolean>(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (playerName === 'Dayro_Moreno') {
+      setShowVideo(true);
+    }
+  }, [playerName]);
   
   // Usar hook para cargar datos del jugador
   const { 
@@ -123,6 +132,28 @@ const PlayerAnalysisPage: React.FC = () => {
             </nav>
           </div>
         </div>
+
+        {playerName === 'Dayro_Moreno' && showVideo && (
+          <div className="fixed bottom-4 right-4 z-50 w-64 h-auto rounded-lg overflow-hidden shadow-xl bg-black">
+            <video 
+              src={DayroVideo}
+              className="w-full h-auto"
+              controls
+              onEnded={() => setShowVideo(false)}
+              ref={videoRef}
+            >
+              Tu navegador no soporta la etiqueta de video.
+            </video>
+            <button 
+              onClick={() => setShowVideo(false)}
+              className="absolute top-2 right-2 bg-black bg-opacity-60 text-white rounded-full p-1 hover:bg-opacity-80 transition-all"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
         
         {/* Contenido según el tab activo */}
         <div className="mt-6">
