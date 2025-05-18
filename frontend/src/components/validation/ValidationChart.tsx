@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ScatterChart, Scatter, ZAxis, Cell, ReferenceLine
+  ScatterChart, Scatter, ZAxis
 } from 'recharts';
 import Card from '../common/Card';
 import { ValidationComparison } from '../../types/models';
