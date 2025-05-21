@@ -25,7 +25,7 @@ Fecha_Numero,Jugador,Oponente,Prediccion_Decimal,Prediccion_Entero,Historico_Tir
 5,Leonardo_Castro,Medellin,0.53,1,2.0,1.0,0.8,0.9520000000000001
 5,Marco_Perez,Boyacá Chicó,0.14,0,1.5,0.5,0.5,0.975
 6,Carlos_Bacca,Envigado,0.36,0,2.17,1.0,0.67,0.951
-6,Dayro_Moreno,Águilas Doradas,0.69,1,3.6,2.0,0.8,0.948
+6,Dayro_Moreno,Águilas Doradas,0.22,0,3.6,2.0,0.8,0.948
 6,Hugo_Rodallega,Bucaramanga,0.47,0,5.0,1.14,0.14,0.91
 6,Leonardo_Castro,Deportivo Cali,0.44,0,2.67,1.0,0.33,0.9520000000000001
 6,Marco_Perez,Envigado,0.45,0,3.44,1.0,0.44,0.975
@@ -40,7 +40,7 @@ Fecha_Numero,Jugador,Oponente,Prediccion_Decimal,Prediccion_Entero,Historico_Tir
 8,Leonardo_Castro,Junior,0.46,0,2.56,1.22,0.89,0.9520000000000001
 8,Marco_Perez,Millonarios,0.13,0,1.0,0.43,0.29,0.975
 9,Carlos_Bacca,Llaneros,0.12,0,1.0,0.0,0.0,0.951
-9,Dayro_Moreno,Independiente Santa Fe,0.58,1,3.67,1.44,0.44,0.948
+9,Dayro_Moreno,Independiente Santa Fe,0.32,0,3.67,1.44,0.44,0.948
 9,Hugo_Rodallega,Once Caldas,0.27,0,3.86,2.0,0.43,0.91
 9,Leonardo_Castro,Águilas Doradas,0.53,1,2.0,1.0,0.8,0.9520000000000001
 9,Marco_Perez,Llaneros,0.0,0,0.4,0.0,0.0,0.975
@@ -50,7 +50,7 @@ Fecha_Numero,Jugador,Oponente,Prediccion_Decimal,Prediccion_Entero,Historico_Tir
 10,Leonardo_Castro,Independiente Santa Fe,0.56,1,3.36,1.36,0.73,0.9520000000000001
 10,Marco_Perez,Unión Magdalena,1.1,1,3.67,2.67,1.67,0.975
 11,Carlos_Bacca,La Equidad,0.23,0,0.75,0.25,0.0,0.951
-11,Dayro_Moreno,Envigado,0.27,0,2.5,0.67,0.5,0.948
+11,Dayro_Moreno,Envigado,0.89,1,2.5,0.67,0.5,0.948
 11,Hugo_Rodallega,Unión Magdalena,0.05,0,3.0,0.5,0.5,0.91
 11,Leonardo_Castro,Alianza FC,0.41,0,2.83,1.0,0.5,0.9520000000000001
 11,Marco_Perez,La Equidad,0.3,0,2.0,0.83,0.17,0.975

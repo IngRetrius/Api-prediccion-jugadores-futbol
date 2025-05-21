@@ -9,6 +9,7 @@ import { SystemStatus } from '../types/api';
 import { getAvailablePlayers } from '../api/playersApi';
 import DepCaliLogo from '../assets/DepCaliEscudo.png';
 import OnceCaldasLogo from '../assets/OnceCaldasEscudo.png';
+import MatrizCorrelacion from '../assets/matriz_correlacion_global.png';
 import { formatPlayerName } from '../utils/formatters';
 import { 
   BarChart, 
@@ -55,24 +56,24 @@ const HomePage: React.FC = () => {
   ];
   
   // Datos para la gráfica de comparación total de goles
-  const goalsComparisonData = [
+    const goalsComparisonData = [
     {
       player: 'Carlos Bacca',
-      golesReales: 3,
+      golesReales: 4,
       lstm: 12,
       sarimax: 3,
       poisson: 0
     },
     {
       player: 'Dayro Moreno',
-      golesReales: 7,
-      lstm: 20,
+      golesReales: 9,
+      lstm: 12,
       sarimax: 9,
-      poisson: 18
+      poisson: 15
     },
     {
       player: 'Hugo Rodallega',
-      golesReales: 9,
+      golesReales: 10,
       lstm: 3,
       sarimax: 1,
       poisson: 2
@@ -317,7 +318,7 @@ const HomePage: React.FC = () => {
               <div className="grid grid-cols-3 gap-2 mb-3">
                 <div className="bg-blue-50 p-2 rounded text-center">
                   <p className="text-xs text-blue-600 font-medium">LSTM</p>
-                  <p className="text-sm font-bold text-blue-900">100%</p>
+                  <p className="text-sm font-bold text-blue-900">89%</p>
                 </div>
                 <div className="bg-green-50 p-2 rounded text-center">
                   <p className="text-xs text-green-600 font-medium">SARIMAX</p>
@@ -445,6 +446,14 @@ const HomePage: React.FC = () => {
             </Link>
           ))}
         </div>
+
+        {/* Estado del sistema mejorado */}
+        <Card 
+          title="Matriz de Correlación" 
+          headerAction={null}
+        >
+          <img src={MatrizCorrelacion} alt="Matriz de correlación" className="w-100% h-auto" />
+        </Card>
         
         {/* Estado del sistema mejorado */}
         <Card 
